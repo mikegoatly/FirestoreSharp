@@ -191,4 +191,35 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
         Assert.Equal("Paris", response.Fields["address"].MapValue.Fields["city"].StringValue);
         Assert.Equal("SW1", response.Fields["address"].MapValue.Fields["zip"].StringValue);
     }
+
+    [Fact]
+    public async Task DeleteDocument_RemovesDocument()
+    {
+        var builder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-delete-test")
+            .WithField("name", "Alice");
+
+        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        await _client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() =>
+            _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteDocument_NotFound_ThrowsRpcException()
+    {
+        var builder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("nonexistent-delete");
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() =>
+            _client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
 }

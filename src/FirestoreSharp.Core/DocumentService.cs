@@ -56,4 +56,9 @@ public sealed class DocumentService(IDocumentStore store)
 
         return await store.UpdateAsync(path, updated, cancellationToken);
     }
+
+    public async Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    {
+        await store.DeleteAsync(path, cancellationToken);
+    }
 }

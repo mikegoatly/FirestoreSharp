@@ -117,4 +117,12 @@ public sealed class DocumentBuilder
 
         return request;
     }
+
+    public DeleteDocumentRequest BuildDeleteRequest()
+    {
+        return new DeleteDocumentRequest
+        {
+            Name = ExpectedName
+        };
+    }
 }

@@ -40,4 +40,14 @@ public sealed class InMemoryDocumentStore : IDocumentStore
 
         return Task.FromResult(document.Clone());
     }
+
+    public Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    {
+        if (!_documents.TryRemove(path.ResourceName, out _))
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, $"Document not found: {path.ResourceName}"));
+        }
+
+        return Task.CompletedTask;
+    }
 }

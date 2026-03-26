@@ -171,4 +171,85 @@ public sealed class FileSystemDocumentStoreTests : IDisposable
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
+
+    [Fact]
+    public async Task DeleteAsync_RemovesFileFromDisk()
+    {
+        var store = CreateStore();
+        var builder = new DocumentBuilder().WithCollection("users").WithId("u-delete");
+        var path = builder.BuildPath();
+
+        await store.CreateAsync(path, builder.Build(), TestContext.Current.CancellationToken);
+        await store.DeleteAsync(path, TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() => store.GetAsync(path, TestContext.Current.CancellationToken));
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_CleansUpEmptyParentDirectories()
+    {
+        var store = CreateStore();
+        var builder = new DocumentBuilder()
+            .WithParent("projects/test-project/databases/(default)/documents/users/u1")
+            .WithCollection("posts")
+            .WithId("post1");
+
+        var path = builder.BuildPath();
+        await store.CreateAsync(path, builder.Build(), TestContext.Current.CancellationToken);
+        await store.DeleteAsync(path, TestContext.Current.CancellationToken);
+
+        // "posts" folder should be removed since it's now empty
+        var postsDir = Path.Combine(_basePath, "test-project", "(default)", "users", "u1", "posts");
+        Assert.False(Directory.Exists(postsDir));
+
+        // "u1" folder should also be removed since it's now empty
+        var u1Dir = Path.Combine(_basePath, "test-project", "(default)", "users", "u1");
+        Assert.False(Directory.Exists(u1Dir));
+
+        // "users" folder should also be removed
+        var usersDir = Path.Combine(_basePath, "test-project", "(default)", "users");
+        Assert.False(Directory.Exists(usersDir));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DoesNotRemoveNonEmptyParentDirectories()
+    {
+        var store = CreateStore();
+        var builder1 = new DocumentBuilder().WithCollection("users").WithId("u-keep");
+        var builder2 = new DocumentBuilder().WithCollection("users").WithId("u-remove");
+
+        await store.CreateAsync(builder1.BuildPath(), builder1.Build(), TestContext.Current.CancellationToken);
+        await store.CreateAsync(builder2.BuildPath(), builder2.Build(), TestContext.Current.CancellationToken);
+
+        await store.DeleteAsync(builder2.BuildPath(), TestContext.Current.CancellationToken);
+
+        // "users" folder should still exist because u-keep is still there
+        var usersDir = Path.Combine(_basePath, "test-project", "(default)", "users");
+        Assert.True(Directory.Exists(usersDir));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_DoesNotDeleteBasePath()
+    {
+        var store = CreateStore();
+        var builder = new DocumentBuilder().WithCollection("users").WithId("u-only");
+
+        var path = builder.BuildPath();
+        await store.CreateAsync(path, builder.Build(), TestContext.Current.CancellationToken);
+        await store.DeleteAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.True(Directory.Exists(_basePath));
+    }
+
+    [Fact]
+    public async Task DeleteAsync_NotFound_ThrowsRpcException()
+    {
+        var store = CreateStore();
+        var path = new DocumentBuilder().WithCollection("users").WithId("u-missing-delete").BuildPath();
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() => store.DeleteAsync(path, TestContext.Current.CancellationToken));
+
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
 }

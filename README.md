@@ -15,11 +15,11 @@ memory limitations.
 
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
-| `GetDocument` | `GetDocumentRequest` | `Document` | Unary | Not implemented |
+| `GetDocument` | `GetDocumentRequest` | `Document` | Unary | ✅ Done |
 | `ListDocuments` | `ListDocumentsRequest` | `ListDocumentsResponse` | Unary | Not implemented |
-| `CreateDocument` | `CreateDocumentRequest` | `Document` | Unary | Not implemented |
-| `UpdateDocument` | `UpdateDocumentRequest` | `Document` | Unary | Not implemented |
-| `DeleteDocument` | `DeleteDocumentRequest` | `Empty` | Unary | Not implemented |
+| `CreateDocument` | `CreateDocumentRequest` | `Document` | Unary | ✅ Done |
+| `UpdateDocument` | `UpdateDocumentRequest` | `Document` | Unary | ✅ Done |
+| `DeleteDocument` | `DeleteDocumentRequest` | `Empty` | Unary | ✅ Done |
 | `BatchGetDocuments` | `BatchGetDocumentsRequest` | `BatchGetDocumentsResponse` | **Server streaming** | Not implemented |
 
 ### Queries

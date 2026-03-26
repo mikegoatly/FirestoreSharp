@@ -9,7 +9,8 @@ namespace FirestoreSharp.Storage.FileSystem;
 
 public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> options) : IDocumentStore
 {
-    private readonly FileSystemStorageOptions _options = options.Value;
+    private readonly string _basePath = Path.GetFullPath(options.Value.BasePath);
+    private readonly bool _compressDocuments = options.Value.CompressDocuments;
 
     public async Task CreateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
     {
@@ -41,6 +42,30 @@ public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> o
         return document.Clone();
     }
 
+    public Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    {
+        var filePath = GetExistingFilePath(path);
+
+        File.Delete(filePath);
+
+        DeleteEmptyParentDirectories(Path.GetDirectoryName(filePath)!);
+
+        return Task.CompletedTask;
+    }
+
+    private void DeleteEmptyParentDirectories(string directory)
+    {
+        string? currentPath = directory;
+        while (!string.IsNullOrEmpty(currentPath)
+               && !string.Equals(currentPath, _basePath, StringComparison.Ordinal)
+               && Directory.Exists(currentPath)
+               && !Directory.EnumerateFileSystemEntries(currentPath).Any())
+        {
+            Directory.Delete(currentPath);
+            currentPath = Path.GetDirectoryName(currentPath);
+        }
+    }
+
     private string GetExistingFilePath(FirestorePath path)
     {
         var filePath = GetFilePath(path);
@@ -56,15 +81,15 @@ public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> o
     private string GetFilePath(FirestorePath path)
     {
         var relativePath = Path.Combine(path.ToStorageSegments());
-        var extension = _options.CompressDocuments ? ".bin.gz" : ".bin";
+        var extension = _compressDocuments ? ".bin.gz" : ".bin";
 
-        return Path.Combine(_options.BasePath, relativePath + extension);
+        return Path.Combine(_basePath, relativePath + extension);
     }
 
     private async Task WriteDocumentAsync(string filePath, Document document, FileMode fileMode, CancellationToken cancellationToken)
     {
         await using var fileStream = new FileStream(filePath, fileMode, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
-        if (_options.CompressDocuments)
+        if (_compressDocuments)
         {
             await using var gzipStream = new GZipStream(fileStream, CompressionLevel.Optimal);
             document.WriteTo(gzipStream);
@@ -78,7 +103,7 @@ public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> o
     private async Task<Document> ReadDocumentAsync(string filePath, CancellationToken cancellationToken)
     {
         await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
-        if (_options.CompressDocuments)
+        if (_compressDocuments)
         {
             await using var gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
             return Document.Parser.ParseFrom(gzipStream);
