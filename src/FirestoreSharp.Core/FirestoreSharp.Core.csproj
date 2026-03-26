@@ -1,15 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-	<PropertyGroup>
-		<TargetFramework>net10.0</TargetFramework>
-		<ImplicitUsings>enable</ImplicitUsings>
-		<Nullable>enable</Nullable>
-	</PropertyGroup>
-
 	<ItemGroup>
-		<PackageReference Include="Google.Protobuf" Version="3.34.1" />
-		<PackageReference Include="Grpc.Core.Api" Version="2.76.0" />
-		<PackageReference Include="Grpc.Tools" Version="2.78.0" PrivateAssets="All" />
+		<PackageReference Include="Google.Protobuf" />
+		<PackageReference Include="Grpc.Core.Api" />
+		<PackageReference Include="Grpc.Tools" PrivateAssets="All" />
 	</ItemGroup>
 
 	<ItemGroup>
