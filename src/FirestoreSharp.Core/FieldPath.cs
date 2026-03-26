@@ -87,10 +87,10 @@ public sealed class FieldPath
         return new FieldPath(segments);
     }
 
-    private static string ParseSimpleSegment(ReadOnlyMemory<char> memory, ref int position)
+    private static string ParseSimpleSegment(ReadOnlyMemory<char> fieldPath, ref int position)
     {
         var start = position;
-        var span = memory.Span;
+        var span = fieldPath.Span;
 
         while (position < span.Length && span[position] != '.')
         {
@@ -99,17 +99,17 @@ public sealed class FieldPath
 
         if (position == start)
         {
-            throw new ArgumentException($"Empty segment at position {position} in field path: '{memory}'", "fieldPath");
+            throw new ArgumentException($"Empty segment at position {position} in field path: '{fieldPath}'", nameof(fieldPath));
         }
 
-        return memory.Slice(start, position - start).ToString();
+        return fieldPath.Slice(start, position - start).ToString();
     }
 
-    private static string ParseQuotedSegment(ReadOnlyMemory<char> memory, ref int position)
+    private static string ParseQuotedSegment(ReadOnlyMemory<char> fieldPath, ref int position)
     {
         position++; // skip opening backtick
         var start = position;
-        var span = memory.Span;
+        var span = fieldPath.Span;
         var hasEscapes = false;
 
         // First pass: scan for end, check if escapes exist
@@ -121,7 +121,7 @@ public sealed class FieldPath
                 hasEscapes = true;
                 if (scanPos + 1 >= span.Length)
                 {
-                    throw new ArgumentException($"Unexpected end of field path after escape character: '{memory}'", "fieldPath");
+                    throw new ArgumentException($"Unexpected end of field path after escape character: '{fieldPath}'", nameof(fieldPath));
                 }
 
                 scanPos += 2;
@@ -138,13 +138,13 @@ public sealed class FieldPath
 
         if (scanPos >= span.Length)
         {
-            throw new ArgumentException($"Unterminated quoted segment in field path: '{memory}'", "fieldPath");
+            throw new ArgumentException($"Unterminated quoted segment in field path: '{fieldPath}'", nameof(fieldPath));
         }
 
         if (!hasEscapes)
         {
             // No escapes — slice directly, one string allocation
-            var result = memory.Slice(start, scanPos - start).ToString();
+            var result = fieldPath.Slice(start, scanPos - start).ToString();
             position = scanPos + 1; // skip closing backtick
             return result;
         }
@@ -173,7 +173,7 @@ public sealed class FieldPath
             }
         }
 
-        throw new ArgumentException($"Unterminated quoted segment in field path: '{memory}'", "fieldPath");
+        throw new ArgumentException($"Unterminated quoted segment in field path: '{fieldPath}'", nameof(fieldPath));
     }
 
     public override string ToString()
@@ -188,7 +188,7 @@ public sealed class FieldPath
             return segment;
         }
 
-        return '`' + segment.Replace("\\", "\\\\").Replace("`", "\\`") + '`';
+        return '`' + segment.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("`", "\\`", StringComparison.Ordinal) + '`';
     }
 
     private static bool IsSimpleSegment(ReadOnlySpan<char> segment)

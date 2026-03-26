@@ -1,13 +1,17 @@
 using System.IO.Compression;
+
 using FirestoreSharp.Core;
+
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf;
+
 using Grpc.Core;
+
 using Microsoft.Extensions.Options;
 
-namespace FirestoreSharp.Storage.FileSystem;
+namespace FirestoreSharp.Core.Stores.FileSystem;
 
-public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> options) : IDocumentStore
+internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> options) : IDocumentStore
 {
     private readonly string _basePath = Path.GetFullPath(options.Value.BasePath);
     private readonly bool _compressDocuments = options.Value.CompressDocuments;
@@ -23,21 +27,21 @@ public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> o
 
         Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
 
-        await WriteDocumentAsync(filePath, document, FileMode.CreateNew, cancellationToken);
+        await WriteDocumentAsync(filePath, document, FileMode.CreateNew, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default)
     {
         var filePath = GetExistingFilePath(path);
 
-        return await ReadDocumentAsync(filePath, cancellationToken);
+        return await ReadDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
     {
         var filePath = GetExistingFilePath(path);
 
-        await WriteDocumentAsync(filePath, document, FileMode.Create, cancellationToken);
+        await WriteDocumentAsync(filePath, document, FileMode.Create, cancellationToken).ConfigureAwait(false);
 
         return document.Clone();
     }
@@ -88,10 +92,12 @@ public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> o
 
     private async Task WriteDocumentAsync(string filePath, Document document, FileMode fileMode, CancellationToken cancellationToken)
     {
+#pragma warning disable CA2007 // Consider calling ConfigureAwait on the awaited task - false positive
         await using var fileStream = new FileStream(filePath, fileMode, FileAccess.Write, FileShare.None, bufferSize: 4096, useAsync: true);
+#pragma warning restore CA2007 // Consider calling ConfigureAwait on the awaited task
         if (_compressDocuments)
         {
-            await using var gzipStream = new GZipStream(fileStream, CompressionLevel.Optimal);
+            using var gzipStream = new GZipStream(fileStream, CompressionLevel.Optimal);
             document.WriteTo(gzipStream);
         }
         else
@@ -102,10 +108,12 @@ public sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions> o
 
     private async Task<Document> ReadDocumentAsync(string filePath, CancellationToken cancellationToken)
     {
+#pragma warning disable CA2007 // Consider calling ConfigureAwait on the awaited task - false positive
         await using var fileStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read, bufferSize: 4096, useAsync: true);
+#pragma warning restore CA2007 // Consider calling ConfigureAwait on the awaited task
         if (_compressDocuments)
         {
-            await using var gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
+            using var gzipStream = new GZipStream(fileStream, CompressionMode.Decompress);
             return Document.Parser.ParseFrom(gzipStream);
         }
         else

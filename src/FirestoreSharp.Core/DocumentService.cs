@@ -3,7 +3,7 @@ using Google.Protobuf.WellKnownTypes;
 
 namespace FirestoreSharp.Core;
 
-public sealed class DocumentService(IDocumentStore store)
+internal sealed class DocumentService(IDocumentStore store) : IDocumentService
 {
     public async Task<Document> CreateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
     {
@@ -14,19 +14,19 @@ public sealed class DocumentService(IDocumentStore store)
         created.CreateTime = now;
         created.UpdateTime = now;
 
-        await store.CreateAsync(path, created, cancellationToken);
+        await store.CreateAsync(path, created, cancellationToken).ConfigureAwait(false);
 
         return created;
     }
 
     public async Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default)
     {
-        return await store.GetAsync(path, cancellationToken);
+        return await store.GetAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<Document> UpdateAsync(FirestorePath path, Document document, IReadOnlyList<string>? updateMaskFieldPaths, CancellationToken cancellationToken = default)
     {
-        var existing = await store.GetAsync(path, cancellationToken);
+        var existing = await store.GetAsync(path, cancellationToken).ConfigureAwait(false);
 
         var updated = existing.Clone();
         updated.UpdateTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
@@ -54,11 +54,11 @@ public sealed class DocumentService(IDocumentStore store)
             updated.Fields.Add(document.Fields);
         }
 
-        return await store.UpdateAsync(path, updated, cancellationToken);
+        return await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default)
     {
-        await store.DeleteAsync(path, cancellationToken);
+        await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
     }
 }

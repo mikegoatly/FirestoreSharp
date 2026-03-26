@@ -4,10 +4,16 @@
 		<PackageReference Include="Google.Protobuf" />
 		<PackageReference Include="Grpc.Core.Api" />
 		<PackageReference Include="Grpc.Tools" PrivateAssets="All" />
+		<PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers">
+		  <PrivateAssets>all</PrivateAssets>
+		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+		</PackageReference>
+		<PackageReference Include="Microsoft.Extensions.Options" />
 	</ItemGroup>
 
 	<ItemGroup>
 		<InternalsVisibleTo Include="FirestoreSharp.Tests.Unit" />
+		<InternalsVisibleTo Include="FirestoreSharp.Server" />
 	</ItemGroup>
 
 	<ItemGroup>

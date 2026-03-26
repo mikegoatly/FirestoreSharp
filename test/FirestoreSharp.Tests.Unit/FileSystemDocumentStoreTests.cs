@@ -1,8 +1,11 @@
 using FirestoreSharp.Core;
-using FirestoreSharp.Storage.FileSystem;
+using FirestoreSharp.Core.Stores.FileSystem;
 using FirestoreSharp.Tests.Unit.Builders;
+
 using Grpc.Core;
+
 using Microsoft.Extensions.Options;
+
 using Xunit;
 
 namespace FirestoreSharp.Tests.Unit;

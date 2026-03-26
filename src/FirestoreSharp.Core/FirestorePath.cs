@@ -132,7 +132,7 @@ public sealed class FirestorePath
             throw new ArgumentException($"Empty {label} in resource name: '{fullPath}'", nameof(fullPath));
         }
 
-        if (segment.Contains('/'))
+        if (segment.Contains('/', StringComparison.Ordinal))
         {
             throw new ArgumentException($"Invalid {label} contains '/': '{fullPath}'", nameof(fullPath));
         }

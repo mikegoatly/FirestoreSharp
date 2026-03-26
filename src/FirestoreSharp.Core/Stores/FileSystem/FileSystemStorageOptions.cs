@@ -1,4 +1,4 @@
-namespace FirestoreSharp.Storage.FileSystem;
+namespace FirestoreSharp.Core.Stores.FileSystem;
 
 public sealed class FileSystemStorageOptions
 {

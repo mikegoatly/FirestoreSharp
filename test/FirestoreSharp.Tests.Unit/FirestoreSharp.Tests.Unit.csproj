@@ -17,7 +17,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FirestoreSharp.Storage.FileSystem\FirestoreSharp.Storage.FileSystem.csproj" />
+    <ProjectReference Include="..\..\src\FirestoreSharp.Core\FirestoreSharp.Core.csproj" />
     <ProjectReference Include="..\..\src\FirestoreSharp.Server\FirestoreSharp.Server.csproj" />
   </ItemGroup>
 

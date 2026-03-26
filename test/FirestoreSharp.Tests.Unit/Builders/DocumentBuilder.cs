@@ -6,7 +6,7 @@ using Value = Google.Cloud.Firestore.V1.Value;
 
 namespace FirestoreSharp.Tests.Unit.Builders;
 
-public sealed class DocumentBuilder
+internal sealed class DocumentBuilder
 {
     private const string DefaultParent = "projects/test-project/databases/(default)/documents";
 

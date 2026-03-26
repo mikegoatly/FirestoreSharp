@@ -1,11 +1,14 @@
 using System.Collections.Concurrent;
+
 using FirestoreSharp.Core;
+
 using Google.Cloud.Firestore.V1;
+
 using Grpc.Core;
 
-namespace FirestoreSharp.Storage.InMemory;
+namespace FirestoreSharp.Core.Stores.InMemory;
 
-public sealed class InMemoryDocumentStore : IDocumentStore
+internal sealed class InMemoryDocumentStore : IDocumentStore
 {
     private readonly ConcurrentDictionary<string, Document> _documents = new();
 
