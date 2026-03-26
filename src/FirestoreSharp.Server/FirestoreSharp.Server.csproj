@@ -16,4 +16,9 @@
     <PackageReference Include="Grpc.AspNetCore" Version="2.64.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\FirestoreSharp.Storage.FileSystem\FirestoreSharp.Storage.FileSystem.csproj" />
+    <ProjectReference Include="..\FirestoreSharp.Storage.InMemory\FirestoreSharp.Storage.InMemory.csproj" />
+  </ItemGroup>
+
 </Project>

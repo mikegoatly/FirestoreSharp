@@ -1,3 +1,11 @@
 <Solution>
-  <Project Path="src/FirestoreSharp.Server/FirestoreSharp.Server.csproj" />
+  <Folder Name="/src/">
+    <Project Path="src/FirestoreSharp.Core/FirestoreSharp.Core.csproj" />
+    <Project Path="src/FirestoreSharp.Server/FirestoreSharp.Server.csproj" />
+    <Project Path="src/FirestoreSharp.Storage.FileSystem/FirestoreSharp.Storage.FileSystem.csproj" />
+    <Project Path="src/FirestoreSharp.Storage.InMemory/FirestoreSharp.Storage.InMemory.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/FirestoreSharp.Tests.Unit/FirestoreSharp.Tests.Unit.csproj" />
+  </Folder>
 </Solution>
