@@ -1,28 +1,29 @@
 using System.Collections.Concurrent;
+using FirestoreSharp.Core;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
 
 namespace FirestoreSharp.Storage.InMemory;
 
-public sealed class InMemoryDocumentStore : Core.IDocumentStore
+public sealed class InMemoryDocumentStore : IDocumentStore
 {
     private readonly ConcurrentDictionary<string, Document> _documents = new();
 
-    public Task CreateAsync(Document document, CancellationToken cancellationToken = default)
+    public Task CreateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
     {
-        if (!_documents.TryAdd(document.Name, document.Clone()))
+        if (!_documents.TryAdd(path.ResourceName, document.Clone()))
         {
-            throw new RpcException(new Status(StatusCode.AlreadyExists, $"Document already exists: {document.Name}"));
+            throw new RpcException(new Status(StatusCode.AlreadyExists, $"Document already exists: {path.ResourceName}"));
         }
 
         return Task.CompletedTask;
     }
 
-    public Task<Document> GetAsync(string name, CancellationToken cancellationToken = default)
+    public Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default)
     {
-        if (!_documents.TryGetValue(name, out var document))
+        if (!_documents.TryGetValue(path.ResourceName, out var document))
         {
-            throw new RpcException(new Status(StatusCode.NotFound, $"Document not found: {name}"));
+            throw new RpcException(new Status(StatusCode.NotFound, $"Document not found: {path.ResourceName}"));
         }
 
         return Task.FromResult(document.Clone());

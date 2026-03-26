@@ -1,3 +1,4 @@
+using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
 using Grpc.Net.Client;
@@ -31,7 +32,7 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
             .WithId("user1")
             .WithField("displayName", "Alice");
 
-        var response = await _client.CreateDocumentAsync(builder.BuildCreateRequest());
+        var response = await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(builder.ExpectedName, response.Name);
         Assert.NotNull(response.CreateTime);
@@ -47,9 +48,9 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
             .WithId("user-get-test")
             .WithField("email", "bob@example.com");
 
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest());
+        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.GetDocumentAsync(builder.BuildGetRequest());
+        var response = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(builder.ExpectedName, response.Name);
         Assert.Equal("bob@example.com", response.Fields["email"].StringValue);
@@ -63,7 +64,7 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
             .WithId("nonexistent");
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.GetDocumentAsync(builder.BuildGetRequest()).ResponseAsync);
+            _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
@@ -76,10 +77,10 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
             .WithId("user-dup-test")
             .WithField("name", "Charlie");
 
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest());
+        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CreateDocumentAsync(builder.BuildCreateRequest()).ResponseAsync);
+            _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.AlreadyExists, ex.StatusCode);
     }

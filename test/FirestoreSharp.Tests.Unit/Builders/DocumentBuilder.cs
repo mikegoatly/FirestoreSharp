@@ -1,9 +1,10 @@
+using FirestoreSharp.Core;
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf.WellKnownTypes;
 
 using Value = Google.Cloud.Firestore.V1.Value;
 
-namespace FirestoreSharp.Tests.Unit;
+namespace FirestoreSharp.Tests.Unit.Builders;
 
 public sealed class DocumentBuilder
 {
@@ -67,9 +68,14 @@ public sealed class DocumentBuilder
     public string DocumentId => _documentId;
     public string ExpectedName => $"{_parent}/{_collectionId}/{_documentId}";
 
+    public FirestorePath BuildPath()
+    {
+        return FirestorePath.FromCreateRequest(_parent, _collectionId, _documentId);
+    }
+
     public Document Build()
     {
-        var doc = new Document();
+        var doc = new Document { Name = ExpectedName };
         foreach (var (key, value) in _fields)
         {
             doc.Fields[key] = value;

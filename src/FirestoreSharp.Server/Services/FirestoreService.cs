@@ -9,20 +9,22 @@ public sealed class FirestoreService(IDocumentStore store) : Firestore.Firestore
 {
     public override async Task<Document> CreateDocument(CreateDocumentRequest request, ServerCallContext context)
     {
+        var path = FirestorePath.FromCreateRequest(request.Parent, request.CollectionId, request.DocumentId);
         var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
 
         var document = request.Document.Clone();
-        document.Name = $"{request.Parent}/{request.CollectionId}/{request.DocumentId}";
+        document.Name = path.ResourceName;
         document.CreateTime = now;
         document.UpdateTime = now;
 
-        await store.CreateAsync(document, context.CancellationToken);
+        await store.CreateAsync(path, document, context.CancellationToken);
 
         return document;
     }
 
     public override async Task<Document> GetDocument(GetDocumentRequest request, ServerCallContext context)
     {
-        return await store.GetAsync(request.Name, context.CancellationToken);
+        var path = FirestorePath.Parse(request.Name);
+        return await store.GetAsync(path, context.CancellationToken);
     }
 }
