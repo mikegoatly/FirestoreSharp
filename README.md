@@ -1,5 +1,7 @@
 # FirestoreSharp
 
+> This is very early stage work-in-progress. The API and design are not finalized and are subject to change.
+
 This project is an open source .NET emulator for Google Cloud Firestore. It is designed to provide a local development environment 
 for testing and development purposes without the need to connect to the actual Firestore service.
 
@@ -60,5 +62,10 @@ memory limitations.
 
 ## Storage Layer
 
-- File-based storage implementation (not started)
-- In-memory storage implementation (for testing, not started)
+- File-based storage implementation
+- In-memory storage implementation
+
+## Releases
+
+The plan is to make this available as a self contained docker container as well. Other options, including
+a self hosted library, dotnet tool, etc. will also be considered.
