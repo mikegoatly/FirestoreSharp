@@ -6,10 +6,11 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddGrpc();
 builder.Services.AddSingleton<IDocumentStore, InMemoryDocumentStore>();
+builder.Services.AddSingleton<DocumentService>();
 
 var app = builder.Build();
 
-app.MapGrpcService<FirestoreService>();
+app.MapGrpcService<FirestoreGrpcService>();
 app.MapGet("/", () => "FirestoreSharp gRPC emulator");
 
 app.Run();

@@ -13,7 +13,7 @@ public sealed class DocumentBuilder
     private string _parent = DefaultParent;
     private string _collectionId = "testCollection";
     private string _documentId = Guid.NewGuid().ToString();
-    private readonly Dictionary<string, Value> _fields = new();
+    private readonly List<(FieldPath Path, Value Value)> _fields = [];
 
     public DocumentBuilder WithParent(string parent)
     {
@@ -35,31 +35,31 @@ public sealed class DocumentBuilder
 
     public DocumentBuilder WithField(string name, string value)
     {
-        _fields[name] = new Value { StringValue = value };
+        _fields.Add((FieldPath.Parse(name), new Value { StringValue = value }));
         return this;
     }
 
     public DocumentBuilder WithField(string name, long value)
     {
-        _fields[name] = new Value { IntegerValue = value };
+        _fields.Add((FieldPath.Parse(name), new Value { IntegerValue = value }));
         return this;
     }
 
     public DocumentBuilder WithField(string name, double value)
     {
-        _fields[name] = new Value { DoubleValue = value };
+        _fields.Add((FieldPath.Parse(name), new Value { DoubleValue = value }));
         return this;
     }
 
     public DocumentBuilder WithField(string name, bool value)
     {
-        _fields[name] = new Value { BooleanValue = value };
+        _fields.Add((FieldPath.Parse(name), new Value { BooleanValue = value }));
         return this;
     }
 
     public DocumentBuilder WithNullField(string name)
     {
-        _fields[name] = new Value { NullValue = NullValue.NullValue };
+        _fields.Add((FieldPath.Parse(name), new Value { NullValue = NullValue.NullValue }));
         return this;
     }
 
@@ -76,9 +76,9 @@ public sealed class DocumentBuilder
     public Document Build()
     {
         var doc = new Document { Name = ExpectedName };
-        foreach (var (key, value) in _fields)
+        foreach (var (path, value) in _fields)
         {
-            doc.Fields[key] = value;
+            DocumentNavigator.SetValue(doc, path, value);
         }
         return doc;
     }
@@ -100,5 +100,21 @@ public sealed class DocumentBuilder
         {
             Name = ExpectedName
         };
+    }
+
+    public UpdateDocumentRequest BuildUpdateRequest(params string[] updateMaskFieldPaths)
+    {
+        var request = new UpdateDocumentRequest
+        {
+            Document = Build()
+        };
+
+        if (updateMaskFieldPaths.Length > 0)
+        {
+            request.UpdateMask = new DocumentMask();
+            request.UpdateMask.FieldPaths.AddRange(updateMaskFieldPaths);
+        }
+
+        return request;
     }
 }

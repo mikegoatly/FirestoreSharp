@@ -132,4 +132,43 @@ public sealed class FileSystemDocumentStoreTests : IDisposable
         var result = await store.GetAsync(path, TestContext.Current.CancellationToken);
         Assert.Equal("Hello", result.Fields["title"].StringValue);
     }
+
+    [Fact]
+    public async Task UpdateAsync_OverwritesExistingDocument()
+    {
+        var store = CreateStore();
+        var builder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("u-update")
+            .WithField("name", "Alice");
+
+        var path = builder.BuildPath();
+        await store.CreateAsync(path, builder.Build(), TestContext.Current.CancellationToken);
+
+        var updatedDoc = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("u-update")
+            .WithField("name", "Bob")
+            .Build();
+
+        await store.UpdateAsync(path, updatedDoc, TestContext.Current.CancellationToken);
+        var result = await store.GetAsync(path, TestContext.Current.CancellationToken);
+
+        Assert.Equal("Bob", result.Fields["name"].StringValue);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_NotFound_ThrowsRpcException()
+    {
+        var store = CreateStore();
+        var builder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("u-missing");
+
+        var path = builder.BuildPath();
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() => store.UpdateAsync(path, builder.Build(), TestContext.Current.CancellationToken));
+
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
 }

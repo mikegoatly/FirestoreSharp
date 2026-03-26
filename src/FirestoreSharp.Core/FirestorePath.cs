@@ -21,13 +21,13 @@ public sealed class FirestorePath
     /// <summary>The full resource name as expected by the Firestore API.</summary>
     public string ResourceName { get; }
 
-    private FirestorePath(string project, string database, IReadOnlyList<string> collectionPath, string documentId)
+    private FirestorePath(string project, string database, IReadOnlyList<string> collectionPath, string documentId, string? resourceName = null)
     {
         Project = project;
         Database = database;
         CollectionPath = collectionPath;
         DocumentId = documentId;
-        ResourceName = $"projects/{Project}/databases/{Database}/documents/{string.Join("/", CollectionPath)}/{DocumentId}";
+        ResourceName = resourceName ?? $"projects/{Project}/databases/{Database}/documents/{string.Join("/", CollectionPath)}/{DocumentId}";
     }
 
     /// <summary>
@@ -89,7 +89,7 @@ public sealed class FirestorePath
         var documentId = parts[^1];
         ValidateSegment(documentId, "document ID", resourceName);
 
-        return new FirestorePath(project, database, collectionPath, documentId);
+        return new FirestorePath(project, database, collectionPath, documentId, resourceName);
     }
 
     /// <summary>

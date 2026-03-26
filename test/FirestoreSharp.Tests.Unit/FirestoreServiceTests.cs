@@ -84,4 +84,111 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
 
         Assert.Equal(StatusCode.AlreadyExists, ex.StatusCode);
     }
+
+    [Fact]
+    public async Task UpdateDocument_ReplacesAllFields()
+    {
+        var createBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-update-all")
+            .WithField("name", "Alice")
+            .WithField("email", "alice@example.com");
+
+        var created = await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var updateBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-update-all")
+            .WithField("name", "Bob");
+
+        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(createBuilder.ExpectedName, response.Name);
+        Assert.Equal("Bob", response.Fields["name"].StringValue);
+        Assert.False(response.Fields.ContainsKey("email"));
+        Assert.Equal(created.CreateTime, response.CreateTime);
+        Assert.True(response.UpdateTime >= created.UpdateTime);
+    }
+
+    [Fact]
+    public async Task UpdateDocument_WithMask_UpdatesOnlySpecifiedFields()
+    {
+        var createBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-update-mask")
+            .WithField("name", "Alice")
+            .WithField("email", "alice@example.com");
+
+        await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var updateBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-update-mask")
+            .WithField("email", "newemail@example.com");
+
+        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("email"), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("Alice", response.Fields["name"].StringValue);
+        Assert.Equal("newemail@example.com", response.Fields["email"].StringValue);
+    }
+
+    [Fact]
+    public async Task UpdateDocument_WithMask_RemovesFieldNotInInput()
+    {
+        var createBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-update-remove")
+            .WithField("name", "Alice")
+            .WithField("email", "alice@example.com");
+
+        await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        // Update mask references "email" but the document doesn't include it → should be removed
+        var updateBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-update-remove")
+            .WithField("name", "Alice");
+
+        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("email"), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("Alice", response.Fields["name"].StringValue);
+        Assert.False(response.Fields.ContainsKey("email"));
+    }
+
+    [Fact]
+    public async Task UpdateDocument_NotFound_ThrowsRpcException()
+    {
+        var builder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("nonexistent-update");
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() =>
+            _client.UpdateDocumentAsync(builder.BuildUpdateRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateDocument_WithNestedFieldMask_UpdatesNestedField()
+    {
+        var createBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-nested-mask")
+            .WithField("name", "Alice")
+            .WithField("address.city", "London")
+            .WithField("address.zip", "SW1");
+
+        await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var updateBuilder = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("user-nested-mask")
+            .WithField("address.city", "Paris");
+
+        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("address.city"), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal("Alice", response.Fields["name"].StringValue);
+        Assert.Equal("Paris", response.Fields["address"].MapValue.Fields["city"].StringValue);
+        Assert.Equal("SW1", response.Fields["address"].MapValue.Fields["zip"].StringValue);
+    }
 }

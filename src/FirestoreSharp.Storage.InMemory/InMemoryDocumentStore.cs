@@ -28,4 +28,16 @@ public sealed class InMemoryDocumentStore : IDocumentStore
 
         return Task.FromResult(document.Clone());
     }
+
+    public Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
+    {
+        if (!_documents.TryGetValue(path.ResourceName, out var existing))
+        {
+            throw new RpcException(new Status(StatusCode.NotFound, $"Document not found: {path.ResourceName}"));
+        }
+
+        _documents[path.ResourceName] = document.Clone();
+
+        return Task.FromResult(document.Clone());
+    }
 }
