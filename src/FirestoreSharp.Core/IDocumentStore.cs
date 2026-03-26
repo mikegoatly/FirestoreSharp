@@ -10,6 +10,8 @@ public interface IDocumentStore
 
     Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default);
 
+    IAsyncEnumerable<Document> ListAsync(string parentPrefix, CancellationToken cancellationToken = default);
+
     Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default);

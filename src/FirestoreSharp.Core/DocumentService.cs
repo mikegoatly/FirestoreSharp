@@ -38,6 +38,37 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
         }
     }
 
+    public async Task<ListDocumentsResult> ListAsync(string parent, string collectionId, int pageSize, string? pageToken, CancellationToken cancellationToken = default)
+    {
+        const int defaultPageSize = 100;
+        var effectivePageSize = pageSize > 0 ? pageSize : defaultPageSize;
+
+        var parentPrefix = string.IsNullOrEmpty(collectionId)
+            ? parent
+            : $"{parent}/{collectionId}";
+
+        var documents = new List<Document>();
+        string? nextPageToken = null;
+
+        await foreach (var document in store.ListAsync(parentPrefix, cancellationToken).ConfigureAwait(false))
+        {
+            if (!string.IsNullOrEmpty(pageToken) && string.Compare(document.Name, pageToken, StringComparison.Ordinal) <= 0)
+            {
+                continue;
+            }
+
+            if (documents.Count >= effectivePageSize)
+            {
+                nextPageToken = documents[^1].Name;
+                break;
+            }
+
+            documents.Add(document);
+        }
+
+        return new ListDocumentsResult(documents, nextPageToken);
+    }
+
     public async Task<Document> UpdateAsync(FirestorePath path, Document document, IReadOnlyList<string>? updateMaskFieldPaths, CancellationToken cancellationToken = default)
     {
         var existing = await store.GetAsync(path, cancellationToken).ConfigureAwait(false);

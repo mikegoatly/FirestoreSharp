@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Runtime.CompilerServices;
 
 using FirestoreSharp.Core;
 
@@ -47,6 +48,25 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         }
 
         return await ReadDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async IAsyncEnumerable<Document> ListAsync(string parentPrefix, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var collectionDir = GetCollectionDirectory(parentPrefix);
+
+        if (!Directory.Exists(collectionDir))
+        {
+            yield break;
+        }
+
+        var extension = _compressDocuments ? ".bin.gz" : ".bin";
+        var files = Directory.EnumerateFiles(collectionDir, "*" + extension, SearchOption.TopDirectoryOnly)
+            .Order(StringComparer.Ordinal);
+
+        foreach (var file in files)
+        {
+            yield return await ReadDocumentAsync(file, cancellationToken).ConfigureAwait(false);
+        }
     }
 
     public async Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
@@ -100,6 +120,15 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         var extension = _compressDocuments ? ".bin.gz" : ".bin";
 
         return Path.Combine(_basePath, relativePath + extension);
+    }
+
+    private string GetCollectionDirectory(string parentPrefix)
+    {
+        // Append a sentinel document ID to make this a valid document path that FirestorePath
+        // can parse and validate, then drop that last segment to get the collection directory.
+        var path = FirestorePath.Parse($"{parentPrefix}/-");
+        var segments = path.ToStorageSegments()[..^1];
+        return Path.Combine(_basePath, Path.Combine(segments.ToArray()));
     }
 
     private async Task WriteDocumentAsync(string filePath, Document document, FileMode fileMode, CancellationToken cancellationToken)

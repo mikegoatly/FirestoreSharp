@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Runtime.CompilerServices;
 
 using FirestoreSharp.Core;
 
@@ -35,6 +36,19 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
     public Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(_documents.TryGetValue(path.ResourceName, out var document) ? document.Clone() : null);
+    }
+
+    public async IAsyncEnumerable<Document> ListAsync(string parentPrefix, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        var documents = _documents
+            .Where(kvp => kvp.Key.StartsWith(parentPrefix, StringComparison.Ordinal))
+            .OrderBy(kvp => kvp.Key, StringComparer.Ordinal);
+
+        foreach (var kvp in documents)
+        {
+            yield return kvp.Value.Clone();
+        }
+
     }
 
     public Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)

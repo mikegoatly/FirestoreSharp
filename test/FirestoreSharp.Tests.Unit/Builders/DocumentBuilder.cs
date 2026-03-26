@@ -125,4 +125,21 @@ internal sealed class DocumentBuilder
             Name = ExpectedName
         };
     }
+
+    public ListDocumentsRequest BuildListRequest(int pageSize = 0, string? pageToken = null)
+    {
+        var request = new ListDocumentsRequest
+        {
+            Parent = _parent,
+            CollectionId = _collectionId,
+            PageSize = pageSize
+        };
+
+        if (pageToken is not null)
+        {
+            request.PageToken = pageToken;
+        }
+
+        return request;
+    }
 }

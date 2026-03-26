@@ -16,7 +16,7 @@ memory limitations.
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
 | `GetDocument` | `GetDocumentRequest` | `Document` | Unary | ✅ Done |
-| `ListDocuments` | `ListDocumentsRequest` | `ListDocumentsResponse` | Unary | Not implemented |
+| `ListDocuments` | `ListDocumentsRequest` | `ListDocumentsResponse` | Unary | ✅ Done |
 | `CreateDocument` | `CreateDocumentRequest` | `Document` | Unary | ✅ Done |
 | `UpdateDocument` | `UpdateDocumentRequest` | `Document` | Unary | ✅ Done |
 | `DeleteDocument` | `DeleteDocumentRequest` | `Empty` | Unary | ✅ Done |

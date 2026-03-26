@@ -332,4 +332,93 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
 
         Assert.Empty(responses);
     }
+
+    [Fact]
+    public async Task ListDocuments_ReturnsDocumentsInCollection()
+    {
+        var builder1 = new DocumentBuilder()
+            .WithCollection("items")
+            .WithId("list-item-1")
+            .WithField("name", "First");
+        var builder2 = new DocumentBuilder()
+            .WithCollection("items")
+            .WithId("list-item-2")
+            .WithField("name", "Second");
+
+        await _client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(builder2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var response = await _client.ListDocumentsAsync(
+            new DocumentBuilder().WithCollection("items").BuildListRequest(),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        var names = response.Documents.Select(d => d.Name).ToList();
+        Assert.Contains(builder1.ExpectedName, names);
+        Assert.Contains(builder2.ExpectedName, names);
+    }
+
+    [Fact]
+    public async Task ListDocuments_EmptyCollection_ReturnsEmpty()
+    {
+        var response = await _client.ListDocumentsAsync(
+            new DocumentBuilder().WithCollection("empty-collection").BuildListRequest(),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Empty(response.Documents);
+        Assert.Equal("", response.NextPageToken);
+    }
+
+    [Fact]
+    public async Task ListDocuments_WithPageSize_ReturnsPagedResults()
+    {
+        for (var i = 0; i < 3; i++)
+        {
+            var builder = new DocumentBuilder()
+                .WithCollection("paged")
+                .WithId($"page-doc-{i:D2}")
+                .WithField("index", i);
+            await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        var page1 = await _client.ListDocumentsAsync(
+            new DocumentBuilder().WithCollection("paged").BuildListRequest(pageSize: 2),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, page1.Documents.Count);
+        Assert.NotEmpty(page1.NextPageToken);
+
+        var page2 = await _client.ListDocumentsAsync(
+            new DocumentBuilder().WithCollection("paged").BuildListRequest(pageSize: 2, pageToken: page1.NextPageToken),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Single(page2.Documents);
+        Assert.Equal("", page2.NextPageToken);
+
+        // No overlap between pages
+        var allNames = page1.Documents.Concat(page2.Documents).Select(d => d.Name).ToList();
+        Assert.Equal(3, allNames.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task ListDocuments_DoesNotReturnDocumentsFromOtherCollections()
+    {
+        var inScope = new DocumentBuilder()
+            .WithCollection("scoped")
+            .WithId("scoped-doc")
+            .WithField("val", "yes");
+        var outOfScope = new DocumentBuilder()
+            .WithCollection("other")
+            .WithId("other-doc")
+            .WithField("val", "no");
+
+        await _client.CreateDocumentAsync(inScope.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(outOfScope.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var response = await _client.ListDocumentsAsync(
+            new DocumentBuilder().WithCollection("scoped").BuildListRequest(),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.All(response.Documents, d => Assert.StartsWith(
+            "projects/test-project/databases/(default)/documents/scoped/", d.Name));
+    }
 }
