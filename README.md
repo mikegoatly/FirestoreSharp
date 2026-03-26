@@ -28,10 +28,37 @@ memory limitations.
 
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
-| `RunQuery` | `RunQueryRequest` | `RunQueryResponse` | **Server streaming** | Not implemented |
+| `RunQuery` | `RunQueryRequest` | `RunQueryResponse` | **Server streaming** | ✅ Done (partial — see below) |
 | `RunAggregationQuery` | `RunAggregationQueryRequest` | `RunAggregationQueryResponse` | **Server streaming** | Not implemented |
 | `PartitionQuery` | `PartitionQueryRequest` | `PartitionQueryResponse` | Unary | Not implemented |
 | `ExecutePipeline` | `ExecutePipelineRequest` | `ExecutePipelineResponse` | **Server streaming** | Not implemented |
+
+#### RunQuery — Supported StructuredQuery Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `from` — direct collection | ✅ | Queries documents in a single named collection |
+| `from` — collection group (`all_descendants: true`) | ✅ | Queries across all subcollections with the same ID |
+| `where` — `EQUAL` / `NOT_EQUAL` | ✅ | |
+| `where` — `LESS_THAN` / `LESS_THAN_OR_EQUAL` | ✅ | |
+| `where` — `GREATER_THAN` / `GREATER_THAN_OR_EQUAL` | ✅ | |
+| `where` — `IN` / `NOT_IN` | ✅ | |
+| `where` — `ARRAY_CONTAINS` / `ARRAY_CONTAINS_ANY` | ✅ | |
+| `where` — `IS_NULL` / `IS_NOT_NULL` (unary) | ✅ | |
+| `where` — `IS_NAN` / `IS_NOT_NAN` (unary) | ✅ | |
+| `where` — composite `AND` / `OR` | ✅ | Arbitrarily nested |
+| `order_by` — explicit field ordering (ASC / DESC) | ✅ | |
+| `order_by` — implicit `__name__` appending | ✅ | Firestore tiebreak semantics |
+| `select` — field projection | ✅ | Returns only requested fields |
+| `offset` | ✅ | |
+| `limit` | ✅ | |
+| `__name__` pseudo-field in filters / ordering | ✅ | Resolved to `Document.Name` |
+| Firestore value ordering (cross-type) | ✅ | null < bool < number < timestamp < string < bytes < reference < geo_point < array < map |
+| NaN ordering (before all numbers) | ✅ | |
+| `start_at` / `end_at` cursors | ❌ Not implemented | |
+| `find_nearest` (vector search) | ❌ Not implemented | |
+| `consistency_selector` (transactions / read_time) | ❌ Not implemented | |
+| `explain_options` | ❌ Not implemented | |
 
 ### Transactions
 

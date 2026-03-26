@@ -17,7 +17,7 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
     private readonly string _basePath = Path.GetFullPath(options.Value.BasePath);
     private readonly bool _compressDocuments = options.Value.CompressDocuments;
 
-    public async Task CreateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
+    public async Task CreateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default)
     {
         var filePath = GetFilePath(path);
 
@@ -31,14 +31,14 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         await WriteDocumentAsync(filePath, document, FileMode.CreateNew, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public async Task<Document> GetAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         var filePath = GetExistingFilePath(path);
 
         return await ReadDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public async Task<Document?> TryGetAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         var filePath = GetFilePath(path);
 
@@ -69,7 +69,7 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         }
     }
 
-    public async Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
+    public async Task<Document> UpdateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default)
     {
         var filePath = GetExistingFilePath(path);
 
@@ -78,7 +78,7 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         return document.Clone();
     }
 
-    public Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         var filePath = GetExistingFilePath(path);
 
@@ -102,7 +102,7 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         }
     }
 
-    private string GetExistingFilePath(FirestorePath path)
+    private string GetExistingFilePath(DocumentPath path)
     {
         var filePath = GetFilePath(path);
 
@@ -114,7 +114,7 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         return filePath;
     }
 
-    private string GetFilePath(FirestorePath path)
+    private string GetFilePath(DocumentPath path)
     {
         var relativePath = Path.Combine(path.ToStorageSegments());
         var extension = _compressDocuments ? ".bin.gz" : ".bin";
@@ -124,11 +124,8 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
 
     private string GetCollectionDirectory(string parentPrefix)
     {
-        // Append a sentinel document ID to make this a valid document path that FirestorePath
-        // can parse and validate, then drop that last segment to get the collection directory.
-        var path = FirestorePath.Parse($"{parentPrefix}/-");
-        var segments = path.ToStorageSegments()[..^1];
-        return Path.Combine(_basePath, Path.Combine(segments.ToArray()));
+        var collection = CollectionPath.Parse(parentPrefix);
+        return Path.Combine(_basePath, Path.Combine(collection.ToStorageSegments()));
     }
 
     private async Task WriteDocumentAsync(string filePath, Document document, FileMode fileMode, CancellationToken cancellationToken)

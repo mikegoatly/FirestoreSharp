@@ -1,3 +1,4 @@
+using FirestoreSharp.Core.Query;
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf.WellKnownTypes;
 
@@ -5,7 +6,7 @@ namespace FirestoreSharp.Core;
 
 internal sealed class DocumentService(IDocumentStore store) : IDocumentService
 {
-    public async Task<Document> CreateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
+    public async Task<Document> CreateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default)
     {
         var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
 
@@ -19,7 +20,7 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
         return created;
     }
 
-    public async Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public async Task<Document> GetAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         return await store.GetAsync(path, cancellationToken).ConfigureAwait(false);
     }
@@ -28,7 +29,7 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
     {
         foreach (var resourceName in resourceNames)
         {
-            var path = FirestorePath.Parse(resourceName);
+            var path = DocumentPath.Parse(resourceName);
             var readTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
             var document = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
@@ -69,7 +70,7 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
         return new ListDocumentsResult(documents, nextPageToken);
     }
 
-    public async Task<Document> UpdateAsync(FirestorePath path, Document document, IReadOnlyList<string>? updateMaskFieldPaths, CancellationToken cancellationToken = default)
+    public async Task<Document> UpdateAsync(DocumentPath path, Document document, IReadOnlyList<string>? updateMaskFieldPaths, CancellationToken cancellationToken = default)
     {
         var existing = await store.GetAsync(path, cancellationToken).ConfigureAwait(false);
 
@@ -102,8 +103,19 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
         return await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<Document>> RunQueryAsync(string parent, StructuredQuery query, CancellationToken cancellationToken = default)
+    {
+        var candidates = new List<Document>();
+        await foreach (var document in store.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        {
+            candidates.Add(document);
+        }
+
+        return QueryEngine.Execute(parent, query, candidates);
     }
 }

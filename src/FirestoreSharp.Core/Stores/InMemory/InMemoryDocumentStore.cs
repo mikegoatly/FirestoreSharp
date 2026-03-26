@@ -13,7 +13,7 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
 {
     private readonly ConcurrentDictionary<string, Document> _documents = new();
 
-    public Task CreateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
+    public Task CreateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default)
     {
         if (!_documents.TryAdd(path.ResourceName, document.Clone()))
         {
@@ -23,7 +23,7 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
         return Task.CompletedTask;
     }
 
-    public Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public Task<Document> GetAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         if (!_documents.TryGetValue(path.ResourceName, out var document))
         {
@@ -33,7 +33,7 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
         return Task.FromResult(document.Clone());
     }
 
-    public Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public Task<Document?> TryGetAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         return Task.FromResult(_documents.TryGetValue(path.ResourceName, out var document) ? document.Clone() : null);
     }
@@ -51,7 +51,7 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
 
     }
 
-    public Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
+    public Task<Document> UpdateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default)
     {
         if (!_documents.TryGetValue(path.ResourceName, out var existing))
         {
@@ -63,7 +63,7 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
         return Task.FromResult(document.Clone());
     }
 
-    public Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    public Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         if (!_documents.TryRemove(path.ResourceName, out _))
         {

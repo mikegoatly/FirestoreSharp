@@ -14,7 +14,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = FirestorePath.FromCreateRequest(request.Parent, request.CollectionId, request.DocumentId);
+        var path = DocumentPath.FromCreateRequest(request.Parent, request.CollectionId, request.DocumentId);
         return await documentService.CreateAsync(path, request.Document, context.CancellationToken).ConfigureAwait(false);
     }
 
@@ -23,7 +23,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = FirestorePath.Parse(request.Name);
+        var path = DocumentPath.Parse(request.Name);
         return await documentService.GetAsync(path, context.CancellationToken).ConfigureAwait(false);
     }
 
@@ -32,7 +32,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = FirestorePath.Parse(request.Document.Name);
+        var path = DocumentPath.Parse(request.Document.Name);
         var maskPaths = request.UpdateMask?.FieldPaths;
         IReadOnlyList<string>? updateMask = maskPaths is { Count: > 0 } ? [.. maskPaths] : null;
         return await documentService.UpdateAsync(path, request.Document, updateMask, context.CancellationToken).ConfigureAwait(false);
@@ -43,7 +43,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = FirestorePath.Parse(request.Name);
+        var path = DocumentPath.Parse(request.Name);
         await documentService.DeleteAsync(path, context.CancellationToken).ConfigureAwait(false);
         return new Empty();
     }
@@ -87,5 +87,36 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         }
 
         return response;
+    }
+
+    public override async Task RunQuery(RunQueryRequest request, IServerStreamWriter<RunQueryResponse> responseStream, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(responseStream);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (request.QueryTypeCase != RunQueryRequest.QueryTypeOneofCase.StructuredQuery)
+        {
+            throw new RpcException(new Status(StatusCode.Unimplemented, "Only structured queries are supported."));
+        }
+
+        var readTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+
+        var documents = await documentService.RunQueryAsync(
+            request.Parent,
+            request.StructuredQuery,
+            context.CancellationToken).ConfigureAwait(false);
+
+        foreach (var document in documents)
+        {
+            await responseStream.WriteAsync(
+                new RunQueryResponse { Document = document, ReadTime = readTime },
+                context.CancellationToken).ConfigureAwait(false);
+        }
+
+        // Always send a final response with read_time and done=true (even when no docs matched)
+        await responseStream.WriteAsync(
+            new RunQueryResponse { ReadTime = readTime, Done = true },
+            context.CancellationToken).ConfigureAwait(false);
     }
 }

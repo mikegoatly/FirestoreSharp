@@ -5,6 +5,8 @@ using Grpc.Net.Client;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
+using Value = Google.Cloud.Firestore.V1.Value;
+
 namespace FirestoreSharp.Tests.Unit;
 
 public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
@@ -420,5 +422,324 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
 
         Assert.All(response.Documents, d => Assert.StartsWith(
             "projects/test-project/databases/(default)/documents/scoped/", d.Name));
+    }
+
+    // ── RunQuery ──────────────────────────────────────────────────────────
+
+    private static async Task<List<RunQueryResponse>> RunQueryAsync(
+        Firestore.FirestoreClient client,
+        RunQueryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var responses = new List<RunQueryResponse>();
+        using var call = client.RunQuery(request, cancellationToken: cancellationToken);
+        await foreach (var response in call.ResponseStream.ReadAllAsync(cancellationToken))
+        {
+            responses.Add(response);
+        }
+        return responses;
+    }
+
+    [Fact]
+    public async Task RunQuery_NoFilter_ReturnsAllDocumentsInCollection()
+    {
+        var alice = new DocumentBuilder().WithCollection("rq-nofilter").WithId("alice").WithField("name", "Alice");
+        var bob = new DocumentBuilder().WithCollection("rq-nofilter").WithId("bob").WithField("name", "Bob");
+
+        await _client.CreateDocumentAsync(alice.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(bob.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new DocumentBuilder().WithCollection("rq-nofilter").BuildRunQueryRequest();
+        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+
+        // Final done=true response is included; filter it out to count real documents
+        var docResponses = responses.Where(r => r.Document is not null).ToList();
+        Assert.Equal(2, docResponses.Count);
+        Assert.Contains(docResponses, r => r.Document.Name == alice.ExpectedName);
+        Assert.Contains(docResponses, r => r.Document.Name == bob.ExpectedName);
+    }
+
+    [Fact]
+    public async Task RunQuery_EqualityFilter_ReturnsMatchingDocuments()
+    {
+        var active1 = new DocumentBuilder().WithCollection("rq-status").WithId("active-1").WithField("status", "active");
+        var active2 = new DocumentBuilder().WithCollection("rq-status").WithId("active-2").WithField("status", "active");
+        var inactive = new DocumentBuilder().WithCollection("rq-status").WithId("inactive-1").WithField("status", "inactive");
+
+        await _client.CreateDocumentAsync(active1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(active2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(inactive.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new DocumentBuilder().WithCollection("rq-status").BuildRunQueryRequest(query =>
+        {
+            query.Where = new StructuredQuery.Types.Filter
+            {
+                FieldFilter = new StructuredQuery.Types.FieldFilter
+                {
+                    Field = new StructuredQuery.Types.FieldReference { FieldPath = "status" },
+                    Op = StructuredQuery.Types.FieldFilter.Types.Operator.Equal,
+                    Value = new Value { StringValue = "active" }
+                }
+            };
+        });
+
+        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var docs = responses.Where(r => r.Document is not null).ToList();
+
+        Assert.Equal(2, docs.Count);
+        Assert.All(docs, r => Assert.Equal("active", r.Document.Fields["status"].StringValue));
+    }
+
+    [Fact]
+    public async Task RunQuery_InequalityFilter_ReturnsMatchingDocuments()
+    {
+        var u1 = new DocumentBuilder().WithCollection("rq-ineq").WithId("u1").WithField("score", 10L);
+        var u2 = new DocumentBuilder().WithCollection("rq-ineq").WithId("u2").WithField("score", 20L);
+        var u3 = new DocumentBuilder().WithCollection("rq-ineq").WithId("u3").WithField("score", 30L);
+
+        await _client.CreateDocumentAsync(u1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(u2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(u3.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new DocumentBuilder().WithCollection("rq-ineq").BuildRunQueryRequest(query =>
+        {
+            query.Where = new StructuredQuery.Types.Filter
+            {
+                FieldFilter = new StructuredQuery.Types.FieldFilter
+                {
+                    Field = new StructuredQuery.Types.FieldReference { FieldPath = "score" },
+                    Op = StructuredQuery.Types.FieldFilter.Types.Operator.GreaterThan,
+                    Value = new Value { IntegerValue = 15 }
+                }
+            };
+        });
+
+        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var docs = responses.Where(r => r.Document is not null).ToList();
+
+        Assert.Equal(2, docs.Count);
+        Assert.All(docs, r => Assert.True(r.Document.Fields["score"].IntegerValue > 15));
+    }
+
+    [Fact]
+    public async Task RunQuery_OrderBy_ReturnsSortedResults()
+    {
+        var u3 = new DocumentBuilder().WithCollection("rq-order").WithId("u3").WithField("rank", 3L);
+        var u1 = new DocumentBuilder().WithCollection("rq-order").WithId("u1").WithField("rank", 1L);
+        var u2 = new DocumentBuilder().WithCollection("rq-order").WithId("u2").WithField("rank", 2L);
+
+        await _client.CreateDocumentAsync(u3.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(u1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(u2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new DocumentBuilder().WithCollection("rq-order").BuildRunQueryRequest(query =>
+        {
+            query.OrderBy.Add(new StructuredQuery.Types.Order
+            {
+                Field = new StructuredQuery.Types.FieldReference { FieldPath = "rank" },
+                Direction = StructuredQuery.Types.Direction.Ascending
+            });
+        });
+
+        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var docs = responses.Where(r => r.Document is not null).ToList();
+
+        Assert.Equal(3, docs.Count);
+        Assert.Equal(1L, docs[0].Document.Fields["rank"].IntegerValue);
+        Assert.Equal(2L, docs[1].Document.Fields["rank"].IntegerValue);
+        Assert.Equal(3L, docs[2].Document.Fields["rank"].IntegerValue);
+    }
+
+    [Fact]
+    public async Task RunQuery_Limit_CapsResults()
+    {
+        for (var i = 1; i <= 5; i++)
+        {
+            var doc = new DocumentBuilder().WithCollection("rq-limit").WithId($"d{i:D2}").WithField("n", (long)i);
+            await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        var request = new DocumentBuilder().WithCollection("rq-limit").BuildRunQueryRequest(query =>
+        {
+            query.OrderBy.Add(new StructuredQuery.Types.Order
+            {
+                Field = new StructuredQuery.Types.FieldReference { FieldPath = "n" },
+                Direction = StructuredQuery.Types.Direction.Ascending
+            });
+            query.Limit = 3;
+        });
+
+        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+            .Where(r => r.Document is not null).ToList();
+
+        Assert.Equal(3, docs.Count);
+        Assert.Equal(1L, docs[0].Document.Fields["n"].IntegerValue);
+    }
+
+    [Fact]
+    public async Task RunQuery_OffsetAndLimit_PagesResults()
+    {
+        for (var i = 1; i <= 5; i++)
+        {
+            var doc = new DocumentBuilder().WithCollection("rq-page").WithId($"p{i:D2}").WithField("n", (long)i);
+            await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        }
+
+        var request = new DocumentBuilder().WithCollection("rq-page").BuildRunQueryRequest(query =>
+        {
+            query.OrderBy.Add(new StructuredQuery.Types.Order
+            {
+                Field = new StructuredQuery.Types.FieldReference { FieldPath = "n" },
+                Direction = StructuredQuery.Types.Direction.Ascending
+            });
+            query.Offset = 2;
+            query.Limit = 2;
+        });
+
+        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+            .Where(r => r.Document is not null).ToList();
+
+        Assert.Equal(2, docs.Count);
+        Assert.Equal(3L, docs[0].Document.Fields["n"].IntegerValue);
+        Assert.Equal(4L, docs[1].Document.Fields["n"].IntegerValue);
+    }
+
+    [Fact]
+    public async Task RunQuery_Select_ReturnsOnlySpecifiedFields()
+    {
+        var doc = new DocumentBuilder()
+            .WithCollection("rq-select").WithId("s1")
+            .WithField("name", "Alice")
+            .WithField("email", "alice@example.com")
+            .WithField("age", 30L);
+
+        await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new DocumentBuilder().WithCollection("rq-select").BuildRunQueryRequest(query =>
+        {
+            query.Select = new StructuredQuery.Types.Projection();
+            query.Select.Fields.Add(new StructuredQuery.Types.FieldReference { FieldPath = "name" });
+            query.Select.Fields.Add(new StructuredQuery.Types.FieldReference { FieldPath = "email" });
+        });
+
+        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+            .Where(r => r.Document is not null).ToList();
+
+        var result = Assert.Single(docs).Document;
+        Assert.True(result.Fields.ContainsKey("name"));
+        Assert.True(result.Fields.ContainsKey("email"));
+        Assert.False(result.Fields.ContainsKey("age"));
+    }
+
+    [Fact]
+    public async Task RunQuery_NoMatchingDocuments_SendsDoneResponse()
+    {
+        var request = new DocumentBuilder().WithCollection("rq-empty").BuildRunQueryRequest(query =>
+        {
+            query.Where = new StructuredQuery.Types.Filter
+            {
+                FieldFilter = new StructuredQuery.Types.FieldFilter
+                {
+                    Field = new StructuredQuery.Types.FieldReference { FieldPath = "status" },
+                    Op = StructuredQuery.Types.FieldFilter.Types.Operator.Equal,
+                    Value = new Value { StringValue = "active" }
+                }
+            };
+        });
+
+        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+
+        Assert.Single(responses); // Only the done=true message
+        Assert.True(responses[0].Done);
+        Assert.Null(responses[0].Document);
+    }
+
+    [Fact]
+    public async Task RunQuery_CompositeAndFilter_ReturnsMatchingDocuments()
+    {
+        var match = new DocumentBuilder().WithCollection("rq-and").WithId("match").WithField("active", true).WithField("score", 50L);
+        var noMatch1 = new DocumentBuilder().WithCollection("rq-and").WithId("no-active").WithField("active", false).WithField("score", 50L);
+        var noMatch2 = new DocumentBuilder().WithCollection("rq-and").WithId("no-score").WithField("active", true).WithField("score", 5L);
+
+        await _client.CreateDocumentAsync(match.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(noMatch1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(noMatch2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new DocumentBuilder().WithCollection("rq-and").BuildRunQueryRequest(query =>
+        {
+            var composite = new StructuredQuery.Types.CompositeFilter
+            {
+                Op = StructuredQuery.Types.CompositeFilter.Types.Operator.And
+            };
+            composite.Filters.Add(new StructuredQuery.Types.Filter
+            {
+                FieldFilter = new StructuredQuery.Types.FieldFilter
+                {
+                    Field = new StructuredQuery.Types.FieldReference { FieldPath = "active" },
+                    Op = StructuredQuery.Types.FieldFilter.Types.Operator.Equal,
+                    Value = new Value { BooleanValue = true }
+                }
+            });
+            composite.Filters.Add(new StructuredQuery.Types.Filter
+            {
+                FieldFilter = new StructuredQuery.Types.FieldFilter
+                {
+                    Field = new StructuredQuery.Types.FieldReference { FieldPath = "score" },
+                    Op = StructuredQuery.Types.FieldFilter.Types.Operator.GreaterThanOrEqual,
+                    Value = new Value { IntegerValue = 20 }
+                }
+            });
+            query.Where = new StructuredQuery.Types.Filter { CompositeFilter = composite };
+        });
+
+        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+            .Where(r => r.Document is not null).ToList();
+
+        Assert.Single(docs);
+        Assert.Equal(match.ExpectedName, docs[0].Document.Name);
+    }
+
+    [Fact]
+    public async Task RunQuery_AllDescendants_ReturnsDocumentsInSubcollections()
+    {
+        var parent = "projects/test-project/databases/(default)/documents";
+
+        // Create a document in a subcollection: rq-groups/g1/members/m1
+        var member = new DocumentBuilder()
+            .WithParent($"{parent}/rq-groups/g1")
+            .WithCollection("members")
+            .WithId("m1")
+            .WithField("role", "admin");
+
+        await _client.CreateDocumentAsync(member.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new RunQueryRequest
+        {
+            Parent = parent,
+            StructuredQuery = new StructuredQuery()
+        };
+        request.StructuredQuery.From.Add(new StructuredQuery.Types.CollectionSelector
+        {
+            CollectionId = "members",
+            AllDescendants = true
+        });
+
+        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+            .Where(r => r.Document is not null).ToList();
+
+        Assert.Single(docs);
+        Assert.Equal(member.ExpectedName, docs[0].Document.Name);
+    }
+
+    [Fact]
+    public async Task RunQuery_AllDocuments_SendsReadTimeOnEachResult()
+    {
+        var doc = new DocumentBuilder().WithCollection("rq-readtime").WithId("rt1").WithField("x", "y");
+        await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new DocumentBuilder().WithCollection("rq-readtime").BuildRunQueryRequest();
+        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+
+        Assert.All(responses, r => Assert.NotNull(r.ReadTime));
     }
 }

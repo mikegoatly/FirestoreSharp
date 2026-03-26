@@ -68,9 +68,9 @@ internal sealed class DocumentBuilder
     public string DocumentId => _documentId;
     public string ExpectedName => $"{_parent}/{_collectionId}/{_documentId}";
 
-    public FirestorePath BuildPath()
+    public DocumentPath BuildPath()
     {
-        return FirestorePath.FromCreateRequest(_parent, _collectionId, _documentId);
+        return DocumentPath.FromCreateRequest(_parent, _collectionId, _documentId);
     }
 
     public Document Build()
@@ -141,5 +141,27 @@ internal sealed class DocumentBuilder
         }
 
         return request;
+    }
+
+    /// <summary>
+    /// Builds a <see cref="RunQueryRequest"/> targeting the current collection from the current parent.
+    /// Optionally add filters or ordering to the returned query.
+    /// </summary>
+    public RunQueryRequest BuildRunQueryRequest(Action<StructuredQuery>? configure = null)
+    {
+        var query = new StructuredQuery();
+        query.From.Add(new StructuredQuery.Types.CollectionSelector
+        {
+            CollectionId = _collectionId,
+            AllDescendants = false
+        });
+
+        configure?.Invoke(query);
+
+        return new RunQueryRequest
+        {
+            Parent = _parent,
+            StructuredQuery = query
+        };
     }
 }

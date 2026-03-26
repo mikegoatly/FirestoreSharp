@@ -4,15 +4,15 @@ namespace FirestoreSharp.Core;
 
 public interface IDocumentStore
 {
-    Task CreateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default);
+    Task CreateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default);
 
-    Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default);
+    Task<Document> GetAsync(DocumentPath path, CancellationToken cancellationToken = default);
 
-    Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default);
+    Task<Document?> TryGetAsync(DocumentPath path, CancellationToken cancellationToken = default);
 
     IAsyncEnumerable<Document> ListAsync(string parentPrefix, CancellationToken cancellationToken = default);
 
-    Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default);
+    Task<Document> UpdateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default);
 
-    Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default);
+    Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default);
 }
