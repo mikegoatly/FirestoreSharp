@@ -6,4 +6,30 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.29.3" />
+    <PackageReference Include="Grpc.Core.Api" Version="2.70.0" />
+    <PackageReference Include="Grpc.Tools" Version="2.69.0" PrivateAssets="All" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Firestore v1 service — generate both client and server stubs -->
+    <Protobuf Include="Protos\google\firestore\v1\firestore.proto" GrpcServices="Both" ProtoRoot="Protos" />
+    <!-- Firestore v1 message protos -->
+    <Protobuf Include="Protos\google\firestore\v1\document.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\common.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\query.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\write.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\pipeline.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\aggregation_result.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\bloom_filter.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\query_profile.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\firestore\v1\explain_stats.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <!-- Google API / dependency protos -->
+    <Protobuf Include="Protos\google\api\*.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\type\*.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\rpc\*.proto" GrpcServices="None" ProtoRoot="Protos" />
+    <Protobuf Include="Protos\google\longrunning\operations.proto" GrpcServices="None" ProtoRoot="Protos" />
+  </ItemGroup>
+
 </Project>
