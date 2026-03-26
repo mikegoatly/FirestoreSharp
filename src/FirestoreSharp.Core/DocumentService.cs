@@ -24,6 +24,20 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
         return await store.GetAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
+    public async IAsyncEnumerable<BatchGetResult> BatchGetAsync(IReadOnlyList<string> resourceNames, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        foreach (var resourceName in resourceNames)
+        {
+            var path = FirestorePath.Parse(resourceName);
+            var readTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+            var document = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+
+            yield return document is not null
+                ? new BatchGetFoundResult(document, readTime)
+                : new BatchGetMissingResult(resourceName, readTime);
+        }
+    }
+
     public async Task<Document> UpdateAsync(FirestorePath path, Document document, IReadOnlyList<string>? updateMaskFieldPaths, CancellationToken cancellationToken = default)
     {
         var existing = await store.GetAsync(path, cancellationToken).ConfigureAwait(false);

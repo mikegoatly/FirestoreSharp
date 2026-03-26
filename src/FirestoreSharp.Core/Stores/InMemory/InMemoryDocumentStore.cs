@@ -32,6 +32,11 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
         return Task.FromResult(document.Clone());
     }
 
+    public Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    {
+        return Task.FromResult(_documents.TryGetValue(path.ResourceName, out var document) ? document.Clone() : null);
+    }
+
     public Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
     {
         if (!_documents.TryGetValue(path.ResourceName, out var existing))

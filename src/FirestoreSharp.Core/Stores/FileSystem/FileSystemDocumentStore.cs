@@ -37,6 +37,18 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         return await ReadDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default)
+    {
+        var filePath = GetFilePath(path);
+
+        if (!File.Exists(filePath))
+        {
+            return null;
+        }
+
+        return await ReadDocumentAsync(filePath, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default)
     {
         var filePath = GetExistingFilePath(path);

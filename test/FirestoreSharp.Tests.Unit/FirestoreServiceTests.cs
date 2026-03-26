@@ -222,4 +222,114 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
+
+    [Fact]
+    public async Task BatchGetDocuments_ReturnsFoundAndMissing()
+    {
+        var builder1 = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("batch-found")
+            .WithField("name", "Alice");
+
+        await _client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var missingName = "projects/test-project/databases/(default)/documents/users/batch-missing";
+
+        var request = new BatchGetDocumentsRequest
+        {
+            Database = "projects/test-project/databases/(default)"
+        };
+        request.Documents.Add(builder1.ExpectedName);
+        request.Documents.Add(missingName);
+
+        var responses = new List<BatchGetDocumentsResponse>();
+        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
+        {
+            responses.Add(response);
+        }
+
+        Assert.Equal(2, responses.Count);
+
+        var found = Assert.Single(responses, r => r.ResultCase == BatchGetDocumentsResponse.ResultOneofCase.Found);
+        Assert.Equal(builder1.ExpectedName, found.Found.Name);
+        Assert.Equal("Alice", found.Found.Fields["name"].StringValue);
+        Assert.NotNull(found.ReadTime);
+
+        var missing = Assert.Single(responses, r => r.ResultCase == BatchGetDocumentsResponse.ResultOneofCase.Missing);
+        Assert.Equal(missingName, missing.Missing);
+        Assert.NotNull(missing.ReadTime);
+    }
+
+    [Fact]
+    public async Task BatchGetDocuments_AllFound_ReturnsAllDocuments()
+    {
+        var builder1 = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("batch-all-1")
+            .WithField("name", "Alice");
+        var builder2 = new DocumentBuilder()
+            .WithCollection("users")
+            .WithId("batch-all-2")
+            .WithField("name", "Bob");
+
+        await _client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await _client.CreateDocumentAsync(builder2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var request = new BatchGetDocumentsRequest
+        {
+            Database = "projects/test-project/databases/(default)"
+        };
+        request.Documents.Add(builder1.ExpectedName);
+        request.Documents.Add(builder2.ExpectedName);
+
+        var responses = new List<BatchGetDocumentsResponse>();
+        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
+        {
+            responses.Add(response);
+        }
+
+        Assert.Equal(2, responses.Count);
+        Assert.All(responses, r => Assert.Equal(BatchGetDocumentsResponse.ResultOneofCase.Found, r.ResultCase));
+    }
+
+    [Fact]
+    public async Task BatchGetDocuments_AllMissing_ReturnsAllMissing()
+    {
+        var request = new BatchGetDocumentsRequest
+        {
+            Database = "projects/test-project/databases/(default)"
+        };
+        request.Documents.Add("projects/test-project/databases/(default)/documents/users/batch-miss-1");
+        request.Documents.Add("projects/test-project/databases/(default)/documents/users/batch-miss-2");
+
+        var responses = new List<BatchGetDocumentsResponse>();
+        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
+        {
+            responses.Add(response);
+        }
+
+        Assert.Equal(2, responses.Count);
+        Assert.All(responses, r => Assert.Equal(BatchGetDocumentsResponse.ResultOneofCase.Missing, r.ResultCase));
+    }
+
+    [Fact]
+    public async Task BatchGetDocuments_EmptyRequest_ReturnsNoResponses()
+    {
+        var request = new BatchGetDocumentsRequest
+        {
+            Database = "projects/test-project/databases/(default)"
+        };
+
+        var responses = new List<BatchGetDocumentsResponse>();
+        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
+        {
+            responses.Add(response);
+        }
+
+        Assert.Empty(responses);
+    }
 }

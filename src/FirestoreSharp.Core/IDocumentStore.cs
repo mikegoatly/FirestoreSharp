@@ -8,6 +8,8 @@ public interface IDocumentStore
 
     Task<Document> GetAsync(FirestorePath path, CancellationToken cancellationToken = default);
 
+    Task<Document?> TryGetAsync(FirestorePath path, CancellationToken cancellationToken = default);
+
     Task<Document> UpdateAsync(FirestorePath path, Document document, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(FirestorePath path, CancellationToken cancellationToken = default);

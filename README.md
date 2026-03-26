@@ -20,7 +20,7 @@ memory limitations.
 | `CreateDocument` | `CreateDocumentRequest` | `Document` | Unary | ✅ Done |
 | `UpdateDocument` | `UpdateDocumentRequest` | `Document` | Unary | ✅ Done |
 | `DeleteDocument` | `DeleteDocumentRequest` | `Empty` | Unary | ✅ Done |
-| `BatchGetDocuments` | `BatchGetDocumentsRequest` | `BatchGetDocumentsResponse` | **Server streaming** | Not implemented |
+| `BatchGetDocuments` | `BatchGetDocumentsRequest` | `BatchGetDocumentsResponse` | **Server streaming** | ✅ Done |
 
 ### Queries
 

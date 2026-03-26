@@ -47,4 +47,23 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         await documentService.DeleteAsync(path, context.CancellationToken).ConfigureAwait(false);
         return new Empty();
     }
+
+    public override async Task BatchGetDocuments(BatchGetDocumentsRequest request, IServerStreamWriter<BatchGetDocumentsResponse> responseStream, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(responseStream);
+        ArgumentNullException.ThrowIfNull(context);
+
+        await foreach (var result in documentService.BatchGetAsync([.. request.Documents], context.CancellationToken).ConfigureAwait(false))
+        {
+            var response = result switch
+            {
+                BatchGetFoundResult found => new BatchGetDocumentsResponse { Found = found.Document, ReadTime = found.ReadTime },
+                BatchGetMissingResult missing => new BatchGetDocumentsResponse { Missing = missing.ResourceName, ReadTime = missing.ReadTime },
+                _ => throw new InvalidOperationException($"Unexpected BatchGetResult type: {result.GetType()}")
+            };
+
+            await responseStream.WriteAsync(response, context.CancellationToken).ConfigureAwait(false);
+        }
+    }
 }
