@@ -742,4 +742,135 @@ public sealed class FirestoreServiceTests : IClassFixture<WebApplicationFactory<
 
         Assert.All(responses, r => Assert.NotNull(r.ReadTime));
     }
+
+    // ── Commit ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Commit_UpsertWrite_CreatesDocument()
+    {
+        var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-create-1").WithField("x", "hello");
+
+        var response = await _client.CommitAsync(builder.BuildCommitRequest(builder.BuildUpsertWrite()), cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Single(response.WriteResults);
+        Assert.NotNull(response.WriteResults[0].UpdateTime);
+        Assert.NotNull(response.CommitTime);
+
+        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("hello", doc.Fields["x"].StringValue);
+    }
+
+    [Fact]
+    public async Task Commit_UpsertWrite_OverwritesExistingDocument()
+    {
+        var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-overwrite-1").WithField("a", "original").WithField("b", "keep");
+        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var overwrite = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-overwrite-1").WithField("a", "updated");
+        await _client.CommitAsync(overwrite.BuildCommitRequest(overwrite.BuildUpsertWrite()), cancellationToken: TestContext.Current.CancellationToken);
+
+        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("updated", doc.Fields["a"].StringValue);
+        Assert.False(doc.Fields.ContainsKey("b"), "upsert without mask should replace all fields");
+    }
+
+    [Fact]
+    public async Task Commit_MaskedUpdateWrite_MergesIntoExistingDocument()
+    {
+        var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-merge-1").WithField("a", "original").WithField("b", "keep");
+        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var update = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-merge-1").WithField("a", "updated");
+        await _client.CommitAsync(update.BuildCommitRequest(update.BuildMaskedUpdateWrite("a")), cancellationToken: TestContext.Current.CancellationToken);
+
+        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("updated", doc.Fields["a"].StringValue);
+        Assert.Equal("keep", doc.Fields["b"].StringValue);
+    }
+
+    [Fact]
+    public async Task Commit_DeleteWrite_RemovesDocument()
+    {
+        var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-delete-1").WithField("x", "y");
+        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        await _client.CommitAsync(builder.BuildCommitRequest(builder.BuildDeleteWrite()), cancellationToken: TestContext.Current.CancellationToken);
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() =>
+            _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+        Assert.Equal(StatusCode.NotFound, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task Commit_PreconditionExistsTrue_DocumentMissing_ThrowsFailedPrecondition()
+    {
+        var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-precond-1");
+        var write = new Write { Update = builder.Build(), CurrentDocument = new Precondition { Exists = true } };
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() =>
+            _client.CommitAsync(builder.BuildCommitRequest(write), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task Commit_PreconditionExistsFalse_DocumentExists_ThrowsFailedPrecondition()
+    {
+        var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-precond-2").WithField("x", "y");
+        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+
+        var write = new Write { Update = builder.Build(), CurrentDocument = new Precondition { Exists = false } };
+
+        var ex = await Assert.ThrowsAsync<RpcException>(() =>
+            _client.CommitAsync(builder.BuildCommitRequest(write), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+        Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
+    }
+
+    [Fact]
+    public async Task Commit_MultipleWrites_AllApplied()
+    {
+        var doc1 = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-multi-1").WithField("v", "a");
+        var doc2 = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-multi-2").WithField("v", "b");
+
+        var response = await _client.CommitAsync(
+            doc1.BuildCommitRequest(doc1.BuildUpsertWrite(), doc2.BuildUpsertWrite()),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, response.WriteResults.Count);
+
+        var result1 = await _client.GetDocumentAsync(doc1.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var result2 = await _client.GetDocumentAsync(doc2.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        Assert.Equal("a", result1.Fields["v"].StringValue);
+        Assert.Equal("b", result2.Fields["v"].StringValue);
+    }
+
+    // ── BatchWrite ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task BatchWrite_SuccessfulWrites_AllStatusOk()
+    {
+        var doc1 = new DocumentBuilder().WithCollection("bw-tests").WithId("bw-ok-1").WithField("v", "1");
+        var doc2 = new DocumentBuilder().WithCollection("bw-tests").WithId("bw-ok-2").WithField("v", "2");
+
+        var response = await _client.BatchWriteAsync(
+            doc1.BuildBatchWriteRequest(doc1.BuildUpsertWrite(), doc2.BuildUpsertWrite()),
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, response.WriteResults.Count);
+        Assert.All(response.Status, s => Assert.Equal((int)StatusCode.OK, s.Code));
+    }
+
+    [Fact]
+    public async Task BatchWrite_MixedResults_ReturnsPerWriteStatus()
+    {
+        var good = new DocumentBuilder().WithCollection("bw-tests").WithId("bw-mixed-good").WithField("v", "ok");
+        var bad = new DocumentBuilder().WithCollection("bw-tests").WithId("bw-mixed-bad");
+        var failingWrite = new Write { Update = bad.Build(), CurrentDocument = new Precondition { Exists = true } };
+
+        var request = good.BuildBatchWriteRequest(good.BuildUpsertWrite(), failingWrite);
+        var response = await _client.BatchWriteAsync(request, cancellationToken: TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, response.Status.Count);
+        Assert.Equal((int)StatusCode.OK, response.Status[0].Code);
+        Assert.Equal((int)StatusCode.FailedPrecondition, response.Status[1].Code);
+    }
 }

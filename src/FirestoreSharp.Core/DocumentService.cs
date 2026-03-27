@@ -1,6 +1,7 @@
 using FirestoreSharp.Core.Query;
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf.WellKnownTypes;
+using Grpc.Core;
 
 namespace FirestoreSharp.Core;
 
@@ -118,4 +119,123 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
 
         return QueryEngine.Execute(parent, query, candidates);
     }
+
+    public async Task<WriteResult> ExecuteWriteAsync(Write write, CancellationToken cancellationToken = default)
+    {
+        var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+
+        switch (write.OperationCase)
+        {
+            case Write.OperationOneofCase.Update:
+            {
+                var path = DocumentPath.Parse(write.Update.Name);
+                var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+
+                CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
+
+                Document updated;
+                var maskPaths = write.UpdateMask?.FieldPaths;
+
+                if (existing is null)
+                {
+                    updated = write.Update.Clone();
+                    updated.Name = path.ResourceName;
+                    updated.CreateTime = now;
+                    updated.UpdateTime = now;
+
+                    if (maskPaths is { Count: > 0 })
+                    {
+                        // Create with only the masked fields present
+                        updated.Fields.Clear();
+                        foreach (var rawPath in maskPaths)
+                        {
+                            var fieldPath = FieldPath.Parse(rawPath);
+                            var val = DocumentNavigator.GetValue(write.Update, fieldPath);
+                            if (val is not null)
+                                DocumentNavigator.SetValue(updated, fieldPath, val);
+                        }
+                    }
+
+                    await store.CreateAsync(path, updated, cancellationToken).ConfigureAwait(false);
+                }
+                else
+                {
+                    updated = existing.Clone();
+                    updated.UpdateTime = now;
+
+                    if (maskPaths is { Count: > 0 })
+                    {
+                        foreach (var rawPath in maskPaths)
+                        {
+                            var fieldPath = FieldPath.Parse(rawPath);
+                            var val = DocumentNavigator.GetValue(write.Update, fieldPath);
+                            if (val is not null)
+                                DocumentNavigator.SetValue(updated, fieldPath, val);
+                            else
+                                DocumentNavigator.RemoveValue(updated, fieldPath);
+                        }
+                    }
+                    else
+                    {
+                        updated.Fields.Clear();
+                        updated.Fields.Add(write.Update.Fields);
+                    }
+
+                    await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
+                }
+
+                return new WriteResult { UpdateTime = now };
+            }
+
+            case Write.OperationOneofCase.Delete:
+            {
+                var path = DocumentPath.Parse(write.Delete);
+                var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+
+                CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
+
+                if (existing is not null)
+                    await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
+
+                return new WriteResult(); // no update_time after a delete
+            }
+
+            case Write.OperationOneofCase.Transform:
+                throw new RpcException(new Status(StatusCode.Unimplemented, "Transform writes are not supported."));
+
+            default:
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Write must have an operation set."));
+        }
+    }
+
+    private static void CheckPrecondition(Document? existing, Precondition? precondition, string resourceName)
+    {
+        if (precondition is null or { ConditionTypeCase: Precondition.ConditionTypeOneofCase.None })
+            return;
+
+        switch (precondition.ConditionTypeCase)
+        {
+            case Precondition.ConditionTypeOneofCase.Exists when precondition.Exists:
+                if (existing is null)
+                    throw new RpcException(new Status(StatusCode.FailedPrecondition,
+                        $"Document '{resourceName}' does not exist."));
+                break;
+
+            case Precondition.ConditionTypeOneofCase.Exists:
+                if (existing is not null)
+                    throw new RpcException(new Status(StatusCode.FailedPrecondition,
+                        $"Document '{resourceName}' already exists."));
+                break;
+
+            case Precondition.ConditionTypeOneofCase.UpdateTime:
+                if (existing is null)
+                    throw new RpcException(new Status(StatusCode.FailedPrecondition,
+                        $"Document '{resourceName}' does not exist."));
+                if (!existing.UpdateTime.Equals(precondition.UpdateTime))
+                    throw new RpcException(new Status(StatusCode.FailedPrecondition,
+                        $"Document '{resourceName}' update time does not match precondition."));
+                break;
+        }
+    }
 }
+

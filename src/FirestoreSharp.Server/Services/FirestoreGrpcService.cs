@@ -119,4 +119,53 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
             new RunQueryResponse { ReadTime = readTime, Done = true },
             context.CancellationToken).ConfigureAwait(false);
     }
+
+    public override async Task<CommitResponse> Commit(CommitRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        // TODO: Writes should be applied atomically (all-or-nothing). Implement a prepare-then-apply
+        // pattern: validate all preconditions and build the full mutation set first (no store writes),
+        // then apply all mutations. This same prepare/apply split will underpin BeginTransaction/Commit
+        // with a transaction token, where the prepare phase happens at BeginTransaction time and the
+        // apply phase happens here when the token is presented.
+
+        var commitTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+        var response = new CommitResponse { CommitTime = commitTime };
+
+        foreach (var write in request.Writes)
+        {
+            var result = await documentService.ExecuteWriteAsync(write, context.CancellationToken).ConfigureAwait(false);
+            response.WriteResults.Add(result);
+        }
+
+        return response;
+    }
+
+    public override async Task<BatchWriteResponse> BatchWrite(BatchWriteRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var response = new BatchWriteResponse();
+
+        foreach (var write in request.Writes)
+        {
+            try
+            {
+                var result = await documentService.ExecuteWriteAsync(write, context.CancellationToken).ConfigureAwait(false);
+                response.WriteResults.Add(result);
+                response.Status.Add(new Google.Rpc.Status { Code = (int)StatusCode.OK });
+            }
+            catch (RpcException ex)
+            {
+                response.WriteResults.Add(new WriteResult());
+                response.Status.Add(new Google.Rpc.Status { Code = (int)ex.StatusCode, Message = ex.Status.Detail });
+            }
+        }
+
+        return response;
+    }
 }
+

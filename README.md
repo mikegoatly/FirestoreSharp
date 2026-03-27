@@ -72,7 +72,7 @@ memory limitations.
 
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
-| `BatchWrite` | `BatchWriteRequest` | `BatchWriteResponse` | Unary | Not implemented |
+| `BatchWrite` | `BatchWriteRequest` | `BatchWriteResponse` | Unary | ✅ Done |
 | `Write` | `WriteRequest` | `WriteResponse` | **Bidirectional streaming** | Not implemented |
 
 ### Real-time Listeners

@@ -164,4 +164,33 @@ internal sealed class DocumentBuilder
             StructuredQuery = query
         };
     }
+
+    /// <summary>Database resource name derived from the parent, e.g. <c>projects/p/databases/(default)</c>.</summary>
+    public string Database => _parent[.._parent.LastIndexOf("/documents", StringComparison.Ordinal)];
+
+    public Write BuildUpsertWrite() => new() { Update = Build() };
+
+    public Write BuildMaskedUpdateWrite(params string[] fieldPaths)
+    {
+        var write = new Write { Update = Build(), UpdateMask = new DocumentMask() };
+        write.UpdateMask.FieldPaths.AddRange(fieldPaths);
+        return write;
+    }
+
+    public Write BuildDeleteWrite() => new() { Delete = ExpectedName };
+
+    public CommitRequest BuildCommitRequest(params Write[] writes)
+    {
+        var request = new CommitRequest { Database = Database };
+        request.Writes.AddRange(writes);
+        return request;
+    }
+
+    public BatchWriteRequest BuildBatchWriteRequest(params Write[] writes)
+    {
+        var request = new BatchWriteRequest { Database = Database };
+        request.Writes.AddRange(writes);
+        return request;
+    }
 }
+
