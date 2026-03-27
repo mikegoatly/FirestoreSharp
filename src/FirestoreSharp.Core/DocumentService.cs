@@ -1,12 +1,17 @@
 using FirestoreSharp.Core.Query;
+
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf.WellKnownTypes;
+
 using Grpc.Core;
 
 namespace FirestoreSharp.Core;
 
-internal sealed class DocumentService(IDocumentStore store) : IDocumentService
+internal sealed class DocumentService(IDocumentStore store) : IDocumentService, IDisposable
 {
+    private readonly SemaphoreSlim _commitLock = new(1, 1);
+
+    public void Dispose() => _commitLock.Dispose();
     public async Task<Document> CreateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default)
     {
         var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
@@ -127,78 +132,86 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
         switch (write.OperationCase)
         {
             case Write.OperationOneofCase.Update:
-            {
-                var path = DocumentPath.Parse(write.Update.Name);
-                var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
-
-                CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
-
-                Document updated;
-                var maskPaths = write.UpdateMask?.FieldPaths;
-
-                if (existing is null)
                 {
-                    updated = write.Update.Clone();
-                    updated.Name = path.ResourceName;
-                    updated.CreateTime = now;
-                    updated.UpdateTime = now;
+                    var path = DocumentPath.Parse(write.Update.Name);
+                    var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
-                    if (maskPaths is { Count: > 0 })
+                    CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
+
+                    Document updated;
+                    var maskPaths = write.UpdateMask?.FieldPaths;
+
+                    if (existing is null)
                     {
-                        // Create with only the masked fields present
-                        updated.Fields.Clear();
-                        foreach (var rawPath in maskPaths)
-                        {
-                            var fieldPath = FieldPath.Parse(rawPath);
-                            var val = DocumentNavigator.GetValue(write.Update, fieldPath);
-                            if (val is not null)
-                                DocumentNavigator.SetValue(updated, fieldPath, val);
-                        }
-                    }
+                        updated = write.Update.Clone();
+                        updated.Name = path.ResourceName;
+                        updated.CreateTime = now;
+                        updated.UpdateTime = now;
 
-                    await store.CreateAsync(path, updated, cancellationToken).ConfigureAwait(false);
-                }
-                else
-                {
-                    updated = existing.Clone();
-                    updated.UpdateTime = now;
-
-                    if (maskPaths is { Count: > 0 })
-                    {
-                        foreach (var rawPath in maskPaths)
+                        if (maskPaths is { Count: > 0 })
                         {
-                            var fieldPath = FieldPath.Parse(rawPath);
-                            var val = DocumentNavigator.GetValue(write.Update, fieldPath);
-                            if (val is not null)
-                                DocumentNavigator.SetValue(updated, fieldPath, val);
-                            else
-                                DocumentNavigator.RemoveValue(updated, fieldPath);
+                            // Create with only the masked fields present
+                            updated.Fields.Clear();
+                            foreach (var rawPath in maskPaths)
+                            {
+                                var fieldPath = FieldPath.Parse(rawPath);
+                                var val = DocumentNavigator.GetValue(write.Update, fieldPath);
+                                if (val is not null)
+                                {
+                                    DocumentNavigator.SetValue(updated, fieldPath, val);
+                                }
+                            }
                         }
+
+                        await store.CreateAsync(path, updated, cancellationToken).ConfigureAwait(false);
                     }
                     else
                     {
-                        updated.Fields.Clear();
-                        updated.Fields.Add(write.Update.Fields);
+                        updated = existing.Clone();
+                        updated.UpdateTime = now;
+
+                        if (maskPaths is { Count: > 0 })
+                        {
+                            foreach (var rawPath in maskPaths)
+                            {
+                                var fieldPath = FieldPath.Parse(rawPath);
+                                var val = DocumentNavigator.GetValue(write.Update, fieldPath);
+                                if (val is not null)
+                                {
+                                    DocumentNavigator.SetValue(updated, fieldPath, val);
+                                }
+                                else
+                                {
+                                    DocumentNavigator.RemoveValue(updated, fieldPath);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            updated.Fields.Clear();
+                            updated.Fields.Add(write.Update.Fields);
+                        }
+
+                        await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
                     }
 
-                    await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
+                    return new WriteResult { UpdateTime = now };
                 }
 
-                return new WriteResult { UpdateTime = now };
-            }
-
             case Write.OperationOneofCase.Delete:
-            {
-                var path = DocumentPath.Parse(write.Delete);
-                var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+                {
+                    var path = DocumentPath.Parse(write.Delete);
+                    var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
-                CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
+                    CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
 
-                if (existing is not null)
-                    await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
+                    if (existing is not null)
+                    {
+                        await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
+                    }
 
-                return new WriteResult(); // no update_time after a delete
-            }
+                    return new WriteResult(); // no update_time after a delete
+                }
 
             case Write.OperationOneofCase.Transform:
                 throw new RpcException(new Status(StatusCode.Unimplemented, "Transform writes are not supported."));
@@ -211,31 +224,231 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService
     private static void CheckPrecondition(Document? existing, Precondition? precondition, string resourceName)
     {
         if (precondition is null or { ConditionTypeCase: Precondition.ConditionTypeOneofCase.None })
+        {
             return;
+        }
 
         switch (precondition.ConditionTypeCase)
         {
             case Precondition.ConditionTypeOneofCase.Exists when precondition.Exists:
                 if (existing is null)
+                {
                     throw new RpcException(new Status(StatusCode.FailedPrecondition,
                         $"Document '{resourceName}' does not exist."));
+                }
+
                 break;
 
             case Precondition.ConditionTypeOneofCase.Exists:
                 if (existing is not null)
+                {
                     throw new RpcException(new Status(StatusCode.FailedPrecondition,
                         $"Document '{resourceName}' already exists."));
+                }
+
                 break;
 
             case Precondition.ConditionTypeOneofCase.UpdateTime:
                 if (existing is null)
+                {
                     throw new RpcException(new Status(StatusCode.FailedPrecondition,
                         $"Document '{resourceName}' does not exist."));
+                }
+
                 if (!existing.UpdateTime.Equals(precondition.UpdateTime))
+                {
                     throw new RpcException(new Status(StatusCode.FailedPrecondition,
                         $"Document '{resourceName}' update time does not match precondition."));
+                }
+
                 break;
         }
     }
+
+    // ── Atomic Commit (prepare-then-apply) ────────────────────────────────────
+
+    public async Task<IReadOnlyList<WriteResult>> CommitAsync(
+        IReadOnlyList<Write> writes,
+        IReadOnlyDictionary<string, Timestamp?>? transactionReadSet,
+        CancellationToken cancellationToken = default)
+    {
+        const int maxWritesPerTransaction = 500;
+        if (writes.Count > maxWritesPerTransaction)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument,
+                $"A transaction cannot contain more than {maxWritesPerTransaction} writes."));
+        }
+
+        await _commitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            // 1. Validate transaction read-set (if transactional)
+            if (transactionReadSet is not null)
+            {
+                await ValidateReadSetAsync(transactionReadSet, cancellationToken).ConfigureAwait(false);
+            }
+
+            // 2. Prepare phase: validate all preconditions and build mutations (no store writes)
+            var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+            var mutations = new List<PreparedMutation>(writes.Count);
+
+            foreach (var write in writes)
+            {
+                var mutation = await PrepareWriteAsync(write, now, cancellationToken).ConfigureAwait(false);
+                mutations.Add(mutation);
+            }
+
+            // 3. Apply phase: execute all mutations (infallible after prepare)
+            var results = new List<WriteResult>(mutations.Count);
+            foreach (var mutation in mutations)
+            {
+                await ApplyMutationAsync(mutation, cancellationToken).ConfigureAwait(false);
+                results.Add(mutation.Result);
+            }
+
+            return results;
+        }
+        finally
+        {
+            _commitLock.Release();
+        }
+    }
+
+    private async Task ValidateReadSetAsync(
+        IReadOnlyDictionary<string, Timestamp?> readSet,
+        CancellationToken cancellationToken)
+    {
+        foreach (var (resourceName, expectedUpdateTime) in readSet)
+        {
+            var path = DocumentPath.Parse(resourceName);
+            var current = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+
+            var currentUpdateTime = current?.UpdateTime;
+
+            var conflict = (expectedUpdateTime, currentUpdateTime) switch
+            {
+                (null, null) => false,       // both missing — no conflict
+                (null, _) => true,           // was missing, now exists
+                (_, null) => true,           // existed, now missing
+                _ => !expectedUpdateTime.Equals(currentUpdateTime)
+            };
+
+            if (conflict)
+            {
+                throw new RpcException(new Status(StatusCode.Aborted,
+                    $"Transaction conflict: document '{resourceName}' was modified by another operation."));
+            }
+        }
+    }
+
+    private async Task<PreparedMutation> PrepareWriteAsync(Write write, Timestamp now, CancellationToken cancellationToken)
+    {
+        switch (write.OperationCase)
+        {
+            case Write.OperationOneofCase.Update:
+                {
+                    var path = DocumentPath.Parse(write.Update.Name);
+                    var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+
+                    CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
+
+                    Document updated;
+                    var maskPaths = write.UpdateMask?.FieldPaths;
+
+                    if (existing is null)
+                    {
+                        updated = write.Update.Clone();
+                        updated.Name = path.ResourceName;
+                        updated.CreateTime = now;
+                        updated.UpdateTime = now;
+
+                        if (maskPaths is { Count: > 0 })
+                        {
+                            updated.Fields.Clear();
+                            foreach (var rawPath in maskPaths)
+                            {
+                                var fieldPath = FieldPath.Parse(rawPath);
+                                var val = DocumentNavigator.GetValue(write.Update, fieldPath);
+                                if (val is not null)
+                                {
+                                    DocumentNavigator.SetValue(updated, fieldPath, val);
+                                }
+                            }
+                        }
+
+                        return new PreparedMutation(MutationType.Create, path, updated, new WriteResult { UpdateTime = now });
+                    }
+                    else
+                    {
+                        updated = existing.Clone();
+                        updated.UpdateTime = now;
+
+                        if (maskPaths is { Count: > 0 })
+                        {
+                            foreach (var rawPath in maskPaths)
+                            {
+                                var fieldPath = FieldPath.Parse(rawPath);
+                                var val = DocumentNavigator.GetValue(write.Update, fieldPath);
+                                if (val is not null)
+                                {
+                                    DocumentNavigator.SetValue(updated, fieldPath, val);
+                                }
+                                else
+                                {
+                                    DocumentNavigator.RemoveValue(updated, fieldPath);
+                                }
+                            }
+                        }
+                        else
+                        {
+                            updated.Fields.Clear();
+                            updated.Fields.Add(write.Update.Fields);
+                        }
+
+                        return new PreparedMutation(MutationType.Update, path, updated, new WriteResult { UpdateTime = now });
+                    }
+                }
+
+            case Write.OperationOneofCase.Delete:
+                {
+                    var path = DocumentPath.Parse(write.Delete);
+                    var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+
+                    CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
+
+                    return existing is not null
+                        ? new PreparedMutation(MutationType.Delete, path, null, new WriteResult())
+                        : new PreparedMutation(MutationType.None, path, null, new WriteResult());
+                }
+
+            case Write.OperationOneofCase.Transform:
+                throw new RpcException(new Status(StatusCode.Unimplemented, "Transform writes are not supported."));
+
+            default:
+                throw new RpcException(new Status(StatusCode.InvalidArgument, "Write must have an operation set."));
+        }
+    }
+
+    private async Task ApplyMutationAsync(PreparedMutation mutation, CancellationToken cancellationToken)
+    {
+        switch (mutation.Type)
+        {
+            case MutationType.Create:
+                await store.CreateAsync(mutation.Path, mutation.Document!, cancellationToken).ConfigureAwait(false);
+                break;
+            case MutationType.Update:
+                await store.UpdateAsync(mutation.Path, mutation.Document!, cancellationToken).ConfigureAwait(false);
+                break;
+            case MutationType.Delete:
+                await store.DeleteAsync(mutation.Path, cancellationToken).ConfigureAwait(false);
+                break;
+            case MutationType.None:
+                break;
+        }
+    }
+
+    private enum MutationType { None, Create, Update, Delete }
+
+    private sealed record PreparedMutation(MutationType Type, DocumentPath Path, Document? Document, WriteResult Result);
 }
 

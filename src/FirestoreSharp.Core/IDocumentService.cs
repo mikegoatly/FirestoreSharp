@@ -1,4 +1,5 @@
 using Google.Cloud.Firestore.V1;
+using Google.Protobuf.WellKnownTypes;
 
 namespace FirestoreSharp.Core;
 
@@ -12,4 +13,5 @@ public interface IDocumentService
     Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Document>> RunQueryAsync(string parent, StructuredQuery query, CancellationToken cancellationToken = default);
     Task<WriteResult> ExecuteWriteAsync(Write write, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<WriteResult>> CommitAsync(IReadOnlyList<Write> writes, IReadOnlyDictionary<string, Timestamp?>? transactionReadSet, CancellationToken cancellationToken = default);
 }

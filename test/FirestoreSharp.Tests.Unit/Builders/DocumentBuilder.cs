@@ -1,5 +1,6 @@
 using FirestoreSharp.Core;
 using Google.Cloud.Firestore.V1;
+using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 
 using Value = Google.Cloud.Firestore.V1.Value;
@@ -191,6 +192,34 @@ internal sealed class DocumentBuilder
         var request = new BatchWriteRequest { Database = Database };
         request.Writes.AddRange(writes);
         return request;
+    }
+
+    public BeginTransactionRequest BuildBeginTransactionRequest(TransactionOptions? options = null)
+    {
+        var request = new BeginTransactionRequest { Database = Database };
+        if (options is not null)
+        {
+            request.Options = options;
+        }
+
+        return request;
+    }
+
+    public RollbackRequest BuildRollbackRequest(ByteString transactionId)
+    {
+        return new RollbackRequest { Database = Database, Transaction = transactionId };
+    }
+
+    public CommitRequest BuildTransactionalCommitRequest(ByteString transactionId, params Write[] writes)
+    {
+        var request = new CommitRequest { Database = Database, Transaction = transactionId };
+        request.Writes.AddRange(writes);
+        return request;
+    }
+
+    public GetDocumentRequest BuildTransactionalGetRequest(ByteString transactionId)
+    {
+        return new GetDocumentRequest { Name = ExpectedName, Transaction = transactionId };
     }
 }
 

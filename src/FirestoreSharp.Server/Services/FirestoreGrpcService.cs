@@ -1,12 +1,15 @@
 using FirestoreSharp.Core;
+using FirestoreSharp.Core.Transactions;
+
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf.WellKnownTypes;
+
 using Grpc.Core;
 
 namespace FirestoreSharp.Server.Services;
 
 #pragma warning disable CA1515 // Consider making public types internal
-public sealed class FirestoreGrpcService(IDocumentService documentService) : Firestore.FirestoreBase
+public sealed class FirestoreGrpcService(IDocumentService documentService, ITransactionManager transactionManager) : Firestore.FirestoreBase
 #pragma warning restore CA1515 // Consider making public types internal
 {
     public override async Task<Document> CreateDocument(CreateDocumentRequest request, ServerCallContext context)
@@ -24,7 +27,15 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         ArgumentNullException.ThrowIfNull(context);
 
         var path = DocumentPath.Parse(request.Name);
-        return await documentService.GetAsync(path, context.CancellationToken).ConfigureAwait(false);
+        var doc = await documentService.GetAsync(path, context.CancellationToken).ConfigureAwait(false);
+
+        if (request.ConsistencySelectorCase == GetDocumentRequest.ConsistencySelectorOneofCase.Transaction
+            && !request.Transaction.IsEmpty)
+        {
+            transactionManager.RecordRead(request.Transaction, doc.Name, doc.UpdateTime);
+        }
+
+        return doc;
     }
 
     public override async Task<Document> UpdateDocument(UpdateDocumentRequest request, ServerCallContext context)
@@ -54,6 +65,9 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         ArgumentNullException.ThrowIfNull(responseStream);
         ArgumentNullException.ThrowIfNull(context);
 
+        var isTransactional = request.ConsistencySelectorCase == BatchGetDocumentsRequest.ConsistencySelectorOneofCase.Transaction
+                              && !request.Transaction.IsEmpty;
+
         await foreach (var result in documentService.BatchGetAsync([.. request.Documents], context.CancellationToken).ConfigureAwait(false))
         {
             var response = result switch
@@ -62,6 +76,17 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
                 BatchGetMissingResult missing => new BatchGetDocumentsResponse { Missing = missing.ResourceName, ReadTime = missing.ReadTime },
                 _ => throw new InvalidOperationException($"Unexpected BatchGetResult type: {result.GetType()}")
             };
+
+            if (isTransactional)
+            {
+                var (docName, updateTime) = result switch
+                {
+                    BatchGetFoundResult found => (found.Document.Name, found.Document.UpdateTime),
+                    BatchGetMissingResult missing => (missing.ResourceName, (Google.Protobuf.WellKnownTypes.Timestamp?)null),
+                    _ => throw new InvalidOperationException($"Unexpected BatchGetResult type: {result.GetType()}")
+                };
+                transactionManager.RecordRead(request.Transaction, docName, updateTime);
+            }
 
             await responseStream.WriteAsync(response, context.CancellationToken).ConfigureAwait(false);
         }
@@ -102,6 +127,9 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
 
         var readTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
 
+        var isTransactional = request.ConsistencySelectorCase == RunQueryRequest.ConsistencySelectorOneofCase.Transaction
+                              && !request.Transaction.IsEmpty;
+
         var documents = await documentService.RunQueryAsync(
             request.Parent,
             request.StructuredQuery,
@@ -109,6 +137,11 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
 
         foreach (var document in documents)
         {
+            if (isTransactional)
+            {
+                transactionManager.RecordRead(request.Transaction, document.Name, document.UpdateTime);
+            }
+
             await responseStream.WriteAsync(
                 new RunQueryResponse { Document = document, ReadTime = readTime },
                 context.CancellationToken).ConfigureAwait(false);
@@ -125,22 +158,50 @@ public sealed class FirestoreGrpcService(IDocumentService documentService) : Fir
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        // TODO: Writes should be applied atomically (all-or-nothing). Implement a prepare-then-apply
-        // pattern: validate all preconditions and build the full mutation set first (no store writes),
-        // then apply all mutations. This same prepare/apply split will underpin BeginTransaction/Commit
-        // with a transaction token, where the prepare phase happens at BeginTransaction time and the
-        // apply phase happens here when the token is presented.
+        IReadOnlyDictionary<string, Timestamp?>? readSet = null;
+
+        if (!request.Transaction.IsEmpty)
+        {
+            if (request.Writes.Count > 0)
+            {
+                transactionManager.ValidateCanWrite(request.Transaction);
+            }
+
+            readSet = transactionManager.GetReadSet(request.Transaction);
+            transactionManager.Complete(request.Transaction);
+        }
+
+        var results = await documentService.CommitAsync(
+            [.. request.Writes],
+            readSet,
+            context.CancellationToken).ConfigureAwait(false);
 
         var commitTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
         var response = new CommitResponse { CommitTime = commitTime };
-
-        foreach (var write in request.Writes)
-        {
-            var result = await documentService.ExecuteWriteAsync(write, context.CancellationToken).ConfigureAwait(false);
-            response.WriteResults.Add(result);
-        }
+        response.WriteResults.Add(results);
 
         return response;
+    }
+
+    public override Task<BeginTransactionResponse> BeginTransaction(BeginTransactionRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var transactionId = transactionManager.BeginTransaction(request.Options);
+
+        return Task.FromResult(new BeginTransactionResponse { Transaction = transactionId });
+    }
+
+    public override Task<Empty> Rollback(RollbackRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Validate the transaction exists and is not expired, then remove it
+        transactionManager.ValidateAndComplete(request.Transaction);
+
+        return Task.FromResult(new Empty());
     }
 
     public override async Task<BatchWriteResponse> BatchWrite(BatchWriteRequest request, ServerCallContext context)

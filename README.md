@@ -57,16 +57,32 @@ memory limitations.
 | NaN ordering (before all numbers) | ✅ | |
 | `start_at` / `end_at` cursors | ❌ Not implemented | |
 | `find_nearest` (vector search) | ❌ Not implemented | |
-| `consistency_selector` (transactions / read_time) | ❌ Not implemented | |
+| `consistency_selector` (transactions / read_time) | ✅ | Transactions supported; `read_time` not yet supported |
 | `explain_options` | ❌ Not implemented | |
 
 ### Transactions
 
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
-| `BeginTransaction` | `BeginTransactionRequest` | `BeginTransactionResponse` | Unary | Not implemented |
-| `Commit` | `CommitRequest` | `CommitResponse` | Unary | Not implemented |
-| `Rollback` | `RollbackRequest` | `Empty` | Unary | Not implemented |
+| `BeginTransaction` | `BeginTransactionRequest` | `BeginTransactionResponse` | Unary | ✅ Done |
+| `Commit` | `CommitRequest` | `CommitResponse` | Unary | ✅ Done |
+| `Rollback` | `RollbackRequest` | `Empty` | Unary | ✅ Done |
+
+#### Transactions — Supported Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `BeginTransaction` (ReadWrite / ReadOnly modes) | ✅ | |
+| `Commit` (transactional and non-transactional) | ✅ | Atomic all-or-nothing (prepare-then-apply) |
+| `Rollback` | ✅ | |
+| Optimistic concurrency (read-set conflict → `ABORTED`) | ✅ | Conflicting transactions automatically aborted |
+| `retry_transaction` support | ✅ | Accepted in `TransactionOptions.ReadWrite` |
+| 60-second idle expiry | ✅ | |
+| Transaction-scoped reads (Get, BatchGet, RunQuery) | ✅ | Read-set tracked for conflict detection |
+| Read-only transaction commit (no writes) | ✅ | |
+| Pessimistic concurrency (document locking) | ❌ Not implemented | Optimistic only |
+| True snapshot isolation (MVCC) | ❌ Not implemented | Reads return current state; conflicts caught at commit |
+| 500-document transaction limit | ✅ | Enforced — rejects with `INVALID_ARGUMENT` |
 
 ### Batch/Streaming Writes
 
