@@ -2,6 +2,7 @@ using FirestoreSharp.Core;
 using FirestoreSharp.Core.Transactions;
 
 using Google.Cloud.Firestore.V1;
+using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 
 using Grpc.Core;
@@ -227,6 +228,78 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         }
 
         return response;
+    }
+
+    public override async Task Write(
+        IAsyncStreamReader<WriteRequest> requestStream,
+        IServerStreamWriter<WriteResponse> responseStream,
+        ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(requestStream);
+        ArgumentNullException.ThrowIfNull(responseStream);
+        ArgumentNullException.ThrowIfNull(context);
+
+        // First message must arrive to open the stream
+        if (!await requestStream.MoveNext(context.CancellationToken).ConfigureAwait(false))
+        {
+            return;
+        }
+
+        var firstRequest = requestStream.Current;
+
+        // Stream resumption is not supported
+        if (!string.IsNullOrEmpty(firstRequest.StreamId))
+        {
+            throw new RpcException(new Status(StatusCode.Unimplemented,
+                "Write stream resumption is not supported."));
+        }
+
+        // First message must have no writes (protocol handshake)
+        if (firstRequest.Writes.Count > 0)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument,
+                "The first Write request must not contain writes."));
+        }
+
+        var streamId = Guid.NewGuid().ToString("N");
+
+        // Send the handshake response with stream_id and an initial stream_token
+        await responseStream.WriteAsync(new WriteResponse
+        {
+            StreamId = streamId,
+            StreamToken = ByteString.New(),
+        }, context.CancellationToken).ConfigureAwait(false);
+
+        // Process subsequent requests until the client closes the stream
+        while (await requestStream.MoveNext(context.CancellationToken).ConfigureAwait(false))
+        {
+            var request = requestStream.Current;
+
+            // Empty writes = heartbeat — respond with a refreshed token
+            if (request.Writes.Count == 0)
+            {
+                await responseStream.WriteAsync(new WriteResponse
+                {
+                    StreamToken = ByteString.New(),
+                }, context.CancellationToken).ConfigureAwait(false);
+                continue;
+            }
+
+            var results = await documentService.CommitAsync(
+                [.. request.Writes],
+                null,
+                context.CancellationToken).ConfigureAwait(false);
+
+            var commitTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+            var response = new WriteResponse
+            {
+                StreamToken = ByteString.New(),
+                CommitTime = commitTime,
+            };
+            response.WriteResults.Add(results);
+
+            await responseStream.WriteAsync(response, context.CancellationToken).ConfigureAwait(false);
+        }
     }
 }
 

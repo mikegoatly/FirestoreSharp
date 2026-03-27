@@ -221,5 +221,7 @@ internal sealed class DocumentBuilder
     {
         return new GetDocumentRequest { Name = ExpectedName, Transaction = transactionId };
     }
+
+    public WriteRequest BuildWriteHandshake() => new() { Database = Database };
 }
 

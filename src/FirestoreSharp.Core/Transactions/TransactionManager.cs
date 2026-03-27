@@ -15,7 +15,7 @@ internal sealed class TransactionManager : ITransactionManager
         CleanupExpired();
 
         var mode = options?.ModeCase ?? TransactionOptions.ModeOneofCase.ReadWrite;
-        var id = ByteString.CopyFrom(Guid.NewGuid().ToByteArray());
+        var id = ByteString.New();
         var state = new TransactionState(id, mode, DateTimeOffset.UtcNow);
 
         _active[id] = state;

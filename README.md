@@ -89,7 +89,17 @@ memory limitations.
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
 | `BatchWrite` | `BatchWriteRequest` | `BatchWriteResponse` | Unary | ✅ Done |
-| `Write` | `WriteRequest` | `WriteResponse` | **Bidirectional streaming** | Not implemented |
+| `Write` | `WriteRequest` | `WriteResponse` | **Bidirectional streaming** | ✅ Done (partial — see below) |
+
+#### Write — Supported Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Stream handshake (open stream, receive `stream_id` + `stream_token`) | ✅ | |
+| Write batch per request (atomic commit) | ✅ | Reuses transaction commit semantics |
+| Heartbeat (empty writes → token refresh) | ✅ | |
+| `stream_token` round-trip (unique token every response) | ✅ | |
+| Stream resumption (`stream_id` on open) | ❌ Not implemented | Rejected with `UNIMPLEMENTED` |
 
 ### Real-time Listeners
 
