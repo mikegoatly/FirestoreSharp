@@ -138,7 +138,7 @@ memory limitations.
 | Target ID auto-assignment (`target_id = 0`) | ✅ | Server assigns a unique ID |
 | Resume tokens (`resume_token` / `read_time`) | ❌ Not implemented | |
 | `ExistenceFilter` / BloomFilter reconciliation | ❌ Not implemented | |
-| `once` flag (single snapshot then remove) | ❌ Not implemented | |
+| `once` flag (single snapshot then remove) | ✅ Done | |
 | Limit-based removal tracking | ❌ Not implemented | Query limit overflow won't send `DocumentRemove` |
 
 ### Collection Management

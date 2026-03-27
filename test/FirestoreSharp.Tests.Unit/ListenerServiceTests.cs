@@ -42,19 +42,9 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         await connection.AddTargetAsync(BuildDocumentTarget(1, builder.ExpectedName), ct);
 
         // Expect: TargetChange(ADD), DocumentChange, TargetChange(CURRENT)
-        var add = await ReadResponseAsync(connection, ct);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.TargetChange, add.ResponseTypeCase);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Add, add.TargetChange.TargetChangeType);
-        Assert.Contains(1, add.TargetChange.TargetIds);
-
-        var docChange = await ReadResponseAsync(connection, ct);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
-        Assert.Equal(builder.ExpectedName, docChange.DocumentChange.Document.Name);
-        Assert.Contains(1, docChange.DocumentChange.TargetIds);
-
-        var current = await ReadResponseAsync(connection, ct);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.TargetChange, current.ResponseTypeCase);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Current, current.TargetChange.TargetChangeType);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add, targetId: 1);
+        await AssertDocumentChangeAsync(connection, ct, builder.ExpectedName, targetId: 1);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
     }
 
     [Fact]
@@ -67,11 +57,8 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         await connection.AddTargetAsync(BuildDocumentTarget(1, resourceName), ct);
 
         // Expect: TargetChange(ADD), TargetChange(CURRENT) — no DocumentChange
-        var add = await ReadResponseAsync(connection, ct);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Add, add.TargetChange.TargetChangeType);
-
-        var current = await ReadResponseAsync(connection, ct);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Current, current.TargetChange.TargetChangeType);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
     }
 
     // ── Document target: live mutations ────────────────────────────────────
@@ -91,10 +78,8 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         // Now create the document
         await _documentService.CreateAsync(builder.BuildPath(), builder.Build(), ct);
 
-        var docChange = await ReadResponseAsync(connection, ct);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
-        Assert.Equal(builder.ExpectedName, docChange.DocumentChange.Document.Name);
-        Assert.Equal("Bob", docChange.DocumentChange.Document.Fields["name"].StringValue);
+        var docChange = await AssertDocumentChangeAsync(connection, ct, builder.ExpectedName);
+        Assert.Equal("Bob", docChange.Document.Fields["name"].StringValue);
     }
 
     [Fact]
@@ -112,9 +97,8 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         var updatedBuilder = new DocumentBuilder().WithCollection("users").WithId("u3").WithField("name", "Carol Updated");
         await _documentService.UpdateAsync(updatedBuilder.BuildPath(), updatedBuilder.Build(), null, ct);
 
-        var docChange = await ReadResponseAsync(connection, ct);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
-        Assert.Equal("Carol Updated", docChange.DocumentChange.Document.Fields["name"].StringValue);
+        var docChange = await AssertDocumentChangeAsync(connection, ct);
+        Assert.Equal("Carol Updated", docChange.Document.Fields["name"].StringValue);
     }
 
     [Fact]
@@ -167,9 +151,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         connection.RemoveTarget(7);
 
-        var remove = await ReadResponseAsync(connection, ct);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Remove, remove.TargetChange.TargetChangeType);
-        Assert.Contains(7, remove.TargetChange.TargetIds);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Remove, targetId: 7);
     }
 
     // ── Query target: initial snapshot ─────────────────────────────────────
@@ -193,15 +175,9 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         await connection.AddTargetAsync(query, ct);
 
         // Expect: ADD, DocumentChange(i1 only), CURRENT
-        var add = await ReadResponseAsync(connection, ct);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Add, add.TargetChange.TargetChangeType);
-
-        var docChange = await ReadResponseAsync(connection, ct);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
-        Assert.Equal(item1.ExpectedName, docChange.DocumentChange.Document.Name);
-
-        var current = await ReadResponseAsync(connection, ct);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Current, current.TargetChange.TargetChangeType);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+        await AssertDocumentChangeAsync(connection, ct, item1.ExpectedName);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
     }
 
     // ── Query target: live mutations ───────────────────────────────────────
@@ -221,9 +197,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         var order = new DocumentBuilder().WithCollection("orders").WithId("o1").WithField("region", "US");
         await _documentService.CreateAsync(order.BuildPath(), order.Build(), ct);
 
-        var docChange = await ReadResponseAsync(connection, ct);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
-        Assert.Equal(order.ExpectedName, docChange.DocumentChange.Document.Name);
+        await AssertDocumentChangeAsync(connection, ct, order.ExpectedName);
     }
 
     [Fact]
@@ -310,13 +284,8 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await _documentService.CreateAsync(builder.BuildPath(), builder.Build(), ct);
 
-        var change1 = await ReadResponseAsync(conn1, ct);
-        var change2 = await ReadResponseAsync(conn2, ct);
-
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, change1.ResponseTypeCase);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, change2.ResponseTypeCase);
-        Assert.Equal(builder.ExpectedName, change1.DocumentChange.Document.Name);
-        Assert.Equal(builder.ExpectedName, change2.DocumentChange.Document.Name);
+        await AssertDocumentChangeAsync(conn1, ct, builder.ExpectedName);
+        await AssertDocumentChangeAsync(conn2, ct, builder.ExpectedName);
     }
 
     // ── Connection disposal ────────────────────────────────────────────────
@@ -357,15 +326,83 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await _documentService.CommitAsync(writes, null, ct);
 
-        var c1 = await ReadResponseAsync(connection, ct);
-        var c2 = await ReadResponseAsync(connection, ct);
+        var c1 = await AssertDocumentChangeAsync(connection, ct);
+        var c2 = await AssertDocumentChangeAsync(connection, ct);
 
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, c1.ResponseTypeCase);
-        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, c2.ResponseTypeCase);
-
-        var names = new[] { c1.DocumentChange.Document.Name, c2.DocumentChange.Document.Name };
+        var names = new[] { c1.Document.Name, c2.Document.Name };
         Assert.Contains(d1.ExpectedName, names);
         Assert.Contains(d2.ExpectedName, names);
+    }
+
+    // ── once flag ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task OnceTarget_DocumentTarget_RemovesAfterInitialSnapshot()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var builder = new DocumentBuilder().WithCollection("users").WithId("once1").WithField("name", "Eve");
+        await _documentService.CreateAsync(builder.BuildPath(), builder.Build(), ct);
+
+        await using var connection = _listenerService.CreateConnection();
+        var target = BuildDocumentTarget(1, builder.ExpectedName);
+        target.Once = true;
+        await connection.AddTargetAsync(target, ct);
+
+        // ADD, DocumentChange, CURRENT, NO_CHANGE, then REMOVE
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add, targetId: 1);
+        await AssertDocumentChangeAsync(connection, ct);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+        await ReadResponseAsync(connection, ct); // NO_CHANGE
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Remove, targetId: 1);
+    }
+
+    [Fact]
+    public async Task OnceTarget_NoFurtherNotificationsAfterRemove()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var builder = new DocumentBuilder().WithCollection("users").WithId("once2").WithField("name", "Frank");
+
+        await using var connection = _listenerService.CreateConnection();
+        var target = BuildDocumentTarget(1, builder.ExpectedName);
+        target.Once = true;
+        await connection.AddTargetAsync(target, ct);
+
+        // No document exists, so the sequence is: ADD, CURRENT, NO_CHANGE, REMOVE
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+        await ReadResponseAsync(connection, ct); // NO_CHANGE
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Remove);
+
+        // Now create the document — should NOT produce any notification since target was removed
+        await _documentService.CreateAsync(builder.BuildPath(), builder.Build(), ct);
+
+        Assert.False(connection.Responses.TryRead(out _));
+    }
+
+    [Fact]
+    public async Task OnceTarget_QueryTarget_RemovesAfterInitialSnapshot()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var item = new DocumentBuilder().WithCollection("products").WithId("p1").WithField("inStock", true);
+        await _documentService.CreateAsync(item.BuildPath(), item.Build(), ct);
+
+        await using var connection = _listenerService.CreateConnection();
+        var target = BuildQueryTarget(2, "projects/test-project/databases/(default)/documents", "products");
+        target.Once = true;
+        await connection.AddTargetAsync(target, ct);
+
+        // ADD, DocumentChange, CURRENT, NO_CHANGE, REMOVE
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+        await AssertDocumentChangeAsync(connection, ct);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+        await ReadResponseAsync(connection, ct); // NO_CHANGE
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Remove, targetId: 2);
+
+        // Further mutations should not reach this target
+        var item2 = new DocumentBuilder().WithCollection("products").WithId("p2").WithField("inStock", false);
+        await _documentService.CreateAsync(item2.BuildPath(), item2.Build(), ct);
+
+        Assert.False(connection.Responses.TryRead(out _));
     }
 
     // ── Target ID auto-assignment ──────────────────────────────────────────
@@ -379,10 +416,9 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(BuildDocumentTarget(0, resourceName), ct);
 
-        var add = await ReadResponseAsync(connection, ct);
-        Assert.Equal(TargetChange.Types.TargetChangeType.Add, add.TargetChange.TargetChangeType);
+        var add = await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
         // Server assigned an ID — it should be > 0
-        Assert.True(add.TargetChange.TargetIds[0] > 0);
+        Assert.True(add.TargetIds[0] > 0);
     }
 
     // ── Helpers ────────────────────────────────────────────────────────────
@@ -437,6 +473,41 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(5));
         return await connection.Responses.ReadAsync(cts.Token);
+    }
+
+    private static async Task<TargetChange> AssertTargetChangeAsync(
+        IListenerConnection connection,
+        CancellationToken ct,
+        TargetChange.Types.TargetChangeType expectedType,
+        int? targetId = null)
+    {
+        var response = await ReadResponseAsync(connection, ct);
+        Assert.Equal(ListenResponse.ResponseTypeOneofCase.TargetChange, response.ResponseTypeCase);
+        Assert.Equal(expectedType, response.TargetChange.TargetChangeType);
+        if (targetId.HasValue)
+        {
+            Assert.Contains(targetId.Value, response.TargetChange.TargetIds);
+        }
+        return response.TargetChange;
+    }
+
+    private static async Task<DocumentChange> AssertDocumentChangeAsync(
+        IListenerConnection connection,
+        CancellationToken ct,
+        string? expectedDocName = null,
+        int? targetId = null)
+    {
+        var response = await ReadResponseAsync(connection, ct);
+        Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, response.ResponseTypeCase);
+        if (expectedDocName is not null)
+        {
+            Assert.Equal(expectedDocName, response.DocumentChange.Document.Name);
+        }
+        if (targetId.HasValue)
+        {
+            Assert.Contains(targetId.Value, response.DocumentChange.TargetIds);
+        }
+        return response.DocumentChange;
     }
 
     private static async Task DrainResponsesAsync(IListenerConnection connection, int count, CancellationToken ct)

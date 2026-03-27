@@ -41,6 +41,13 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
 
         SendTargetChange(TargetChange.Types.TargetChangeType.Current, targetId);
         SendNoChange();
+
+        // If once=true, remove the target immediately after delivering the snapshot.
+        // The client receives a REMOVE and no further live updates for this target.
+        if (target.Once)
+        {
+            RemoveTarget(targetId);
+        }
     }
 
     public void RemoveTarget(int targetId)
