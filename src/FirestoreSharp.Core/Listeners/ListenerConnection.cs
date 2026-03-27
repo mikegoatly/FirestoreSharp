@@ -40,6 +40,7 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
         await SendInitialSnapshotAsync(listenerTarget, cancellationToken).ConfigureAwait(false);
 
         SendTargetChange(TargetChange.Types.TargetChangeType.Current, targetId);
+        SendExistenceFilter(listenerTarget);
         SendNoChange();
 
         // If once=true, remove the target immediately after delivering the snapshot.
@@ -303,5 +304,22 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
         remove.RemovedTargetIds.Add(removedTargetIds);
 
         _channel.Writer.TryWrite(new ListenResponse { DocumentRemove = remove });
+    }
+
+    private void SendExistenceFilter(ListenerTarget target)
+    {
+        var filter = new ExistenceFilter
+        {
+            TargetId = target.TargetId,
+            Count = target.ActiveDocuments.Count,
+        };
+
+        var bloomFilter = BloomFilterBuilder.Build(target.ActiveDocuments);
+        if (bloomFilter is not null)
+        {
+            filter.UnchangedNames = bloomFilter;
+        }
+
+        _channel.Writer.TryWrite(new ListenResponse { Filter = filter });
     }
 }

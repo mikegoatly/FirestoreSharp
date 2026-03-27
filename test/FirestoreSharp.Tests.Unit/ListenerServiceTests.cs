@@ -72,8 +72,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(BuildDocumentTarget(1, builder.ExpectedName), ct);
 
-        // Drain initial snapshot (ADD + CURRENT + NO_CHANGE, no doc)
-        await DrainResponsesAsync(connection, 3, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
 
         // Now create the document
         await _documentService.CreateAsync(builder.BuildPath(), builder.Build(), ct);
@@ -91,7 +90,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(BuildDocumentTarget(1, builder.ExpectedName), ct);
-        await DrainResponsesAsync(connection, 4, ct); // ADD + DocumentChange + CURRENT + NO_CHANGE
+        await DrainInitialSnapshotAsync(connection, ct);
 
         // Update the document
         var updatedBuilder = new DocumentBuilder().WithCollection("users").WithId("u3").WithField("name", "Carol Updated");
@@ -110,7 +109,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(BuildDocumentTarget(1, builder.ExpectedName), ct);
-        await DrainResponsesAsync(connection, 4, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
 
         await _documentService.DeleteAsync(builder.BuildPath(), ct);
 
@@ -129,7 +128,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(BuildDocumentTarget(1, watched.ExpectedName), ct);
-        await DrainResponsesAsync(connection, 3, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
 
         // Create an unwatched document — should not produce any notification
         await _documentService.CreateAsync(unwatched.BuildPath(), unwatched.Build(), ct);
@@ -147,7 +146,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(BuildDocumentTarget(7, resourceName), ct);
-        await DrainResponsesAsync(connection, 3, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
 
         connection.RemoveTarget(7);
 
@@ -191,7 +190,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(query, ct);
-        await DrainResponsesAsync(connection, 3, ct); // ADD + CURRENT + NO_CHANGE
+        await DrainInitialSnapshotAsync(connection, ct);
 
         // Create a matching document
         var order = new DocumentBuilder().WithCollection("orders").WithId("o1").WithField("region", "US");
@@ -209,7 +208,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(query, ct);
-        await DrainResponsesAsync(connection, 3, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
 
         // Create a non-matching document
         var order = new DocumentBuilder().WithCollection("orders").WithId("o2").WithField("region", "EU");
@@ -232,7 +231,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(query, ct);
-        await DrainResponsesAsync(connection, 4, ct); // ADD + DocChange + CURRENT + NO_CHANGE
+        await DrainInitialSnapshotAsync(connection, ct);
 
         // Update the document so it no longer matches
         var updated = new DocumentBuilder().WithCollection("orders").WithId("o3").WithField("region", "EU");
@@ -257,7 +256,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(query, ct);
-        await DrainResponsesAsync(connection, 4, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
 
         await _documentService.DeleteAsync(order.BuildPath(), ct);
 
@@ -279,8 +278,8 @@ public sealed class ListenerServiceTests : IAsyncDisposable
 
         await conn1.AddTargetAsync(BuildDocumentTarget(1, builder.ExpectedName), ct);
         await conn2.AddTargetAsync(BuildDocumentTarget(2, builder.ExpectedName), ct);
-        await DrainResponsesAsync(conn1, 3, ct);
-        await DrainResponsesAsync(conn2, 3, ct);
+        await DrainInitialSnapshotAsync(conn1, ct);
+        await DrainInitialSnapshotAsync(conn2, ct);
 
         await _documentService.CreateAsync(builder.BuildPath(), builder.Build(), ct);
 
@@ -314,8 +313,8 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         await using var connection = _listenerService.CreateConnection();
         await connection.AddTargetAsync(BuildDocumentTarget(1, d1.ExpectedName), ct);
         await connection.AddTargetAsync(BuildDocumentTarget(2, d2.ExpectedName), ct);
-        // Drain initial snapshots: (ADD + CURRENT + NO_CHANGE) * 2
-        await DrainResponsesAsync(connection, 6, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
+        await DrainInitialSnapshotAsync(connection, ct);
 
         // Commit both writes atomically
         var writes = new[]
@@ -348,10 +347,11 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         target.Once = true;
         await connection.AddTargetAsync(target, ct);
 
-        // ADD, DocumentChange, CURRENT, NO_CHANGE, then REMOVE
+        // ADD, DocumentChange, CURRENT, ExistenceFilter, NO_CHANGE, then REMOVE
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add, targetId: 1);
         await AssertDocumentChangeAsync(connection, ct);
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+        await ReadResponseAsync(connection, ct); // ExistenceFilter
         await ReadResponseAsync(connection, ct); // NO_CHANGE
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Remove, targetId: 1);
     }
@@ -367,9 +367,10 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         target.Once = true;
         await connection.AddTargetAsync(target, ct);
 
-        // No document exists, so the sequence is: ADD, CURRENT, NO_CHANGE, REMOVE
+        // No document exists, so the sequence is: ADD, CURRENT, ExistenceFilter, NO_CHANGE, REMOVE
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+        await ReadResponseAsync(connection, ct); // ExistenceFilter
         await ReadResponseAsync(connection, ct); // NO_CHANGE
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Remove);
 
@@ -391,10 +392,11 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         target.Once = true;
         await connection.AddTargetAsync(target, ct);
 
-        // ADD, DocumentChange, CURRENT, NO_CHANGE, REMOVE
+        // ADD, DocumentChange, CURRENT, ExistenceFilter, NO_CHANGE, REMOVE
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
         await AssertDocumentChangeAsync(connection, ct);
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+        await ReadResponseAsync(connection, ct); // ExistenceFilter
         await ReadResponseAsync(connection, ct); // NO_CHANGE
         await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Remove, targetId: 2);
 
@@ -403,6 +405,91 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         await _documentService.CreateAsync(item2.BuildPath(), item2.Build(), ct);
 
         Assert.False(connection.Responses.TryRead(out _));
+    }
+
+    // ── ExistenceFilter ────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExistenceFilter_EmptyTarget_HasZeroCount()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var resourceName = "projects/test-project/databases/(default)/documents/ef/missing";
+
+        await using var connection = _listenerService.CreateConnection();
+        await connection.AddTargetAsync(BuildDocumentTarget(1, resourceName), ct);
+
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+
+        var filterResponse = await ReadResponseAsync(connection, ct);
+        Assert.Equal(ListenResponse.ResponseTypeOneofCase.Filter, filterResponse.ResponseTypeCase);
+        Assert.Equal(1, filterResponse.Filter.TargetId);
+        Assert.Equal(0, filterResponse.Filter.Count);
+        Assert.Null(filterResponse.Filter.UnchangedNames); // no bloom filter needed for empty set
+    }
+
+    [Fact]
+    public async Task ExistenceFilter_WithDocuments_HasCorrectCountAndBloomFilter()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var doc1 = new DocumentBuilder().WithCollection("ef-col").WithId("d1").WithField("x", "1");
+        var doc2 = new DocumentBuilder().WithCollection("ef-col").WithId("d2").WithField("x", "2");
+        await _documentService.CreateAsync(doc1.BuildPath(), doc1.Build(), ct);
+        await _documentService.CreateAsync(doc2.BuildPath(), doc2.Build(), ct);
+
+        var query = BuildQueryTarget(1, "projects/test-project/databases/(default)/documents", "ef-col");
+        await using var connection = _listenerService.CreateConnection();
+        await connection.AddTargetAsync(query, ct);
+
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+        await AssertDocumentChangeAsync(connection, ct);
+        await AssertDocumentChangeAsync(connection, ct);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+
+        var filterResponse = await ReadResponseAsync(connection, ct);
+        Assert.Equal(ListenResponse.ResponseTypeOneofCase.Filter, filterResponse.ResponseTypeCase);
+        var filter = filterResponse.Filter;
+        Assert.Equal(1, filter.TargetId);
+        Assert.Equal(2, filter.Count);
+        Assert.NotNull(filter.UnchangedNames);
+        Assert.True(filter.UnchangedNames.HashCount >= 1);
+        Assert.NotEmpty(filter.UnchangedNames.Bits.Bitmap);
+    }
+
+    [Fact]
+    public async Task ExistenceFilter_BloomFilter_ContainsAllActiveDocuments()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var docs = Enumerable.Range(1, 5)
+            .Select(i => new DocumentBuilder().WithCollection($"ef-bloom-{suffix}").WithId($"d{i}"))
+            .ToList();
+
+        foreach (var doc in docs)
+        {
+            await _documentService.CreateAsync(doc.BuildPath(), doc.Build(), ct);
+        }
+
+        var query = BuildQueryTarget(1, "projects/test-project/databases/(default)/documents", $"ef-bloom-{suffix}");
+        await using var connection = _listenerService.CreateConnection();
+        await connection.AddTargetAsync(query, ct);
+
+        // Drain ADD + 5 DocumentChanges + CURRENT
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+        for (var i = 0; i < 5; i++) await AssertDocumentChangeAsync(connection, ct);
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Current);
+
+        var filterResponse = await ReadResponseAsync(connection, ct);
+        var bloomFilter = filterResponse.Filter.UnchangedNames;
+        Assert.NotNull(bloomFilter);
+
+        // Every active document must test positive in the bloom filter (no false negatives)
+        foreach (var doc in docs)
+        {
+            Assert.True(
+                BloomFilterBuilder.MightContain(bloomFilter, doc.ExpectedName),
+                $"Bloom filter must contain '{doc.ExpectedName}'");
+        }
     }
 
     // ── Target ID auto-assignment ──────────────────────────────────────────
@@ -510,11 +597,40 @@ public sealed class ListenerServiceTests : IAsyncDisposable
         return response.DocumentChange;
     }
 
-    private static async Task DrainResponsesAsync(IListenerConnection connection, int count, CancellationToken ct)
+    /// <summary>
+    /// Drains the full initial-snapshot sequence for one target:
+    /// ADD → 0..N DocumentChanges → CURRENT → ExistenceFilter → NO_CHANGE.
+    /// Returns the documents received in the snapshot.
+    /// Call once per AddTargetAsync invocation.
+    /// </summary>
+    private static async Task<IReadOnlyList<Document>> DrainInitialSnapshotAsync(
+        IListenerConnection connection, CancellationToken ct)
     {
-        for (var i = 0; i < count; i++)
+        await AssertTargetChangeAsync(connection, ct, TargetChange.Types.TargetChangeType.Add);
+
+        var documents = new List<Document>();
+        while (true)
         {
-            await ReadResponseAsync(connection, ct);
+            var response = await ReadResponseAsync(connection, ct);
+            if (response.ResponseTypeCase == ListenResponse.ResponseTypeOneofCase.DocumentChange)
+            {
+                documents.Add(response.DocumentChange.Document);
+            }
+            else
+            {
+                Assert.Equal(ListenResponse.ResponseTypeOneofCase.TargetChange, response.ResponseTypeCase);
+                Assert.Equal(TargetChange.Types.TargetChangeType.Current, response.TargetChange.TargetChangeType);
+                break;
+            }
         }
+
+        var filterResponse = await ReadResponseAsync(connection, ct);
+        Assert.Equal(ListenResponse.ResponseTypeOneofCase.Filter, filterResponse.ResponseTypeCase);
+
+        var noChange = await ReadResponseAsync(connection, ct);
+        Assert.Equal(ListenResponse.ResponseTypeOneofCase.TargetChange, noChange.ResponseTypeCase);
+        Assert.Equal(TargetChange.Types.TargetChangeType.NoChange, noChange.TargetChange.TargetChangeType);
+
+        return documents;
     }
 }

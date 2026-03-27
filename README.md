@@ -137,7 +137,7 @@ memory limitations.
 | Multiple targets per stream | ✅ | Add/remove targets dynamically |
 | Target ID auto-assignment (`target_id = 0`) | ✅ | Server assigns a unique ID |
 | Resume tokens (`resume_token` / `read_time`) | ❌ Not implemented | |
-| `ExistenceFilter` / BloomFilter reconciliation | ❌ Not implemented | |
+| `ExistenceFilter` / BloomFilter reconciliation | ✅ Implemented | Sent after `CURRENT` on every target registration |
 | `once` flag (single snapshot then remove) | ✅ Done | |
 | Limit-based removal tracking | ❌ Not implemented | Query limit overflow won't send `DocumentRemove` |
 
