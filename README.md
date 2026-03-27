@@ -30,7 +30,7 @@ memory limitations.
 |-----|---------|----------|-----------|-------------|
 | `RunQuery` | `RunQueryRequest` | `RunQueryResponse` | **Server streaming** | ✅ Done (partial — see below) |
 | `RunAggregationQuery` | `RunAggregationQueryRequest` | `RunAggregationQueryResponse` | **Server streaming** | ✅ Done (partial — see below) |
-| `PartitionQuery` | `PartitionQueryRequest` | `PartitionQueryResponse` | Unary | Not implemented |
+| `PartitionQuery` | `PartitionQueryRequest` | `PartitionQueryResponse` | Unary | ✅ Done |
 | `ExecutePipeline` | `ExecutePipelineRequest` | `ExecutePipelineResponse` | **Server streaming** | Not implemented |
 
 #### RunQuery — Supported StructuredQuery Features

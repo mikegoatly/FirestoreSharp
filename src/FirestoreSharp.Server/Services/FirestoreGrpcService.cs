@@ -96,6 +96,34 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         }
     }
 
+    public override async Task<PartitionQueryResponse> PartitionQuery(PartitionQueryRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (request.QueryTypeCase != PartitionQueryRequest.QueryTypeOneofCase.StructuredQuery)
+        {
+            throw new RpcException(new Status(StatusCode.Unimplemented, "Only structured queries are supported for PartitionQuery."));
+        }
+
+        var result = await documentService.PartitionQueryAsync(
+            request.Parent,
+            request.StructuredQuery,
+            request.PartitionCount,
+            request.PageSize,
+            string.IsNullOrEmpty(request.PageToken) ? null : request.PageToken,
+            context.CancellationToken).ConfigureAwait(false);
+
+        var response = new PartitionQueryResponse();
+        response.Partitions.AddRange(result.Partitions);
+        if (result.NextPageToken is not null)
+        {
+            response.NextPageToken = result.NextPageToken;
+        }
+
+        return response;
+    }
+
     public override async Task<ListCollectionIdsResponse> ListCollectionIds(ListCollectionIdsRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);

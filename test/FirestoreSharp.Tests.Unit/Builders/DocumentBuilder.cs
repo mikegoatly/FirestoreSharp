@@ -259,6 +259,36 @@ internal sealed class DocumentBuilder
         return request;
     }
 
+    public PartitionQueryRequest BuildPartitionQueryRequest(long partitionCount, int pageSize = 0, string? pageToken = null)
+    {
+        var query = new StructuredQuery();
+        query.From.Add(new StructuredQuery.Types.CollectionSelector
+        {
+            CollectionId = _collectionId,
+            AllDescendants = true
+        });
+        query.OrderBy.Add(new StructuredQuery.Types.Order
+        {
+            Field = new StructuredQuery.Types.FieldReference { FieldPath = "__name__" },
+            Direction = StructuredQuery.Types.Direction.Ascending
+        });
+
+        var request = new PartitionQueryRequest
+        {
+            Parent = _parent,
+            StructuredQuery = query,
+            PartitionCount = partitionCount,
+            PageSize = pageSize
+        };
+
+        if (pageToken is not null)
+        {
+            request.PageToken = pageToken;
+        }
+
+        return request;
+    }
+
     public ListCollectionIdsRequest BuildListCollectionIdsRequest(string? parent = null, int pageSize = 0, string? pageToken = null)
     {
         var request = new ListCollectionIdsRequest

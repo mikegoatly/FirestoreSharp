@@ -211,6 +211,45 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         return new AggregationQueryResult(aggregationResult, documents);
     }
 
+    public async Task<PartitionQueryResult> PartitionQueryAsync(
+        string parent,
+        StructuredQuery query,
+        long partitionCount,
+        int pageSize,
+        string? pageToken,
+        CancellationToken cancellationToken = default)
+    {
+        if (partitionCount <= 0)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument,
+                "partition_count must be a positive integer."));
+        }
+
+        // Only collection-group queries are supported; unsupported shapes return empty.
+        var from = query.From;
+        if (from.Count != 1 || !from[0].AllDescendants)
+        {
+            return new PartitionQueryResult([], null);
+        }
+
+        var partitionQuery = new StructuredQuery();
+        partitionQuery.From.Add(from[0]);
+        partitionQuery.OrderBy.Add(new StructuredQuery.Types.Order
+        {
+            Field = new StructuredQuery.Types.FieldReference { FieldPath = "__name__" },
+            Direction = StructuredQuery.Types.Direction.Ascending
+        });
+
+        var candidates = new List<Document>();
+        await foreach (var document in store.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        {
+            candidates.Add(document);
+        }
+
+        var documents = QueryEngine.Execute(parent, partitionQuery, candidates);
+        return PartitionEngine.Execute(documents, partitionCount, pageSize, pageToken);
+    }
+
     public async Task<WriteResult> ExecuteWriteAsync(Write write, CancellationToken cancellationToken = default)
     {
         var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
