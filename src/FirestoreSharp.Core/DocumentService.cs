@@ -185,6 +185,32 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         return QueryEngine.Execute(parent, query, candidates);
     }
 
+    public async Task<AggregationQueryResult> RunAggregationQueryAsync(string parent, StructuredAggregationQuery aggregationQuery, CancellationToken cancellationToken = default)
+    {
+        const int minAggregations = 1;
+        const int maxAggregations = 5;
+
+        if (aggregationQuery.Aggregations.Count < minAggregations || aggregationQuery.Aggregations.Count > maxAggregations)
+        {
+            throw new RpcException(new Status(StatusCode.InvalidArgument,
+                $"A minimum of {minAggregations} and maximum of {maxAggregations} aggregations per query are allowed."));
+        }
+
+        var innerQuery = aggregationQuery.QueryTypeCase == StructuredAggregationQuery.QueryTypeOneofCase.StructuredQuery
+            ? aggregationQuery.StructuredQuery
+            : new StructuredQuery();
+
+        var candidates = new List<Document>();
+        await foreach (var document in store.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        {
+            candidates.Add(document);
+        }
+
+        var documents = QueryEngine.Execute(parent, innerQuery, candidates);
+        var aggregationResult = AggregationEngine.Execute(aggregationQuery, documents);
+        return new AggregationQueryResult(aggregationResult, documents);
+    }
+
     public async Task<WriteResult> ExecuteWriteAsync(Write write, CancellationToken cancellationToken = default)
     {
         var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);

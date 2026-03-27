@@ -110,7 +110,10 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private async Task AddAsync()
     {
         var title = NewTitle.Trim();
-        if (string.IsNullOrEmpty(title)) return;
+        if (string.IsNullOrEmpty(title))
+        {
+            return;
+        }
 
         var item = new TodoItem { Title = title };
         try
@@ -133,7 +136,10 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private async Task SaveAsync()
     {
-        if (SelectedItem is null) return;
+        if (SelectedItem is null)
+        {
+            return;
+        }
 
         try
         {
@@ -148,7 +154,10 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private async Task DeleteAsync()
     {
-        if (SelectedItem?.Id is null) return;
+        if (SelectedItem?.Id is null)
+        {
+            return;
+        }
 
         try
         {

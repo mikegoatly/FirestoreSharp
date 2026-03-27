@@ -285,7 +285,10 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
     {
         var query = new StructuredQuery();
         query.From.Add(new StructuredQuery.Types.CollectionSelector { CollectionId = collectionId });
-        if (filter is not null) query.Where = filter;
+        if (filter is not null)
+        {
+            query.Where = filter;
+        }
 
         return new Target
         {
@@ -337,7 +340,10 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
             try
             {
                 var hasMore = await call.ResponseStream.MoveNext(cts.Token);
-                if (!hasMore) return;
+                if (!hasMore)
+                {
+                    return;
+                }
                 // Skip NO_CHANGE heartbeats — they are protocol-level snapshot signals, not application data.
                 if (call.ResponseStream.Current is
                     {

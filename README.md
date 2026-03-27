@@ -29,7 +29,7 @@ memory limitations.
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
 | `RunQuery` | `RunQueryRequest` | `RunQueryResponse` | **Server streaming** | ✅ Done (partial — see below) |
-| `RunAggregationQuery` | `RunAggregationQueryRequest` | `RunAggregationQueryResponse` | **Server streaming** | Not implemented |
+| `RunAggregationQuery` | `RunAggregationQueryRequest` | `RunAggregationQueryResponse` | **Server streaming** | ✅ Done (partial — see below) |
 | `PartitionQuery` | `PartitionQueryRequest` | `PartitionQueryResponse` | Unary | Not implemented |
 | `ExecutePipeline` | `ExecutePipelineRequest` | `ExecutePipelineResponse` | **Server streaming** | Not implemented |
 
@@ -58,6 +58,23 @@ memory limitations.
 | `start_at` / `end_at` cursors | ❌ Not implemented | |
 | `find_nearest` (vector search) | ❌ Not implemented | |
 | `consistency_selector` (transactions / read_time) | ✅ | Transactions supported; `read_time` not yet supported |
+| `explain_options` | ❌ Not implemented | |
+
+#### RunAggregationQuery — Supported Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| `COUNT(*)` | ✅ | Counts all matching documents |
+| `COUNT_UP_TO(n)` | ✅ | Caps scan at `n` documents |
+| `SUM(field)` | ✅ | Skips non-numeric/null; returns int64 if all integers and no overflow, else double |
+| `AVG(field)` | ✅ | Always returns double; returns NULL for empty numeric set |
+| NaN propagation (SUM / AVG) | ✅ | Any NaN in the field → result is NaN |
+| Alias auto-assignment (`field_0`, `field_1`, …) | ✅ | Global counter, increments only for un-aliased aggregations |
+| Up to 5 aggregations per query | ✅ | Returns `INVALID_ARGUMENT` if violated |
+| Inner `StructuredQuery` (filters, cursors, limit, offset) | ✅ | Full query pipeline applied before aggregation |
+| `consistency_selector` — existing transaction | ✅ | |
+| `consistency_selector` — `new_transaction` | ✅ | Transaction ID returned in first streaming response; scanned documents recorded in the transaction read-set. Note: only documents that existed at query time are tracked — inserts of new matching documents after the read are not detected as conflicts (no MVCC). |
+| `consistency_selector` — `read_time` | ❌ Not implemented | |
 | `explain_options` | ❌ Not implemented | |
 
 ### Transactions

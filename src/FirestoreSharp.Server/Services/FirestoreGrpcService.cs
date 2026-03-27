@@ -178,6 +178,54 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
             context.CancellationToken).ConfigureAwait(false);
     }
 
+    public override async Task RunAggregationQuery(RunAggregationQueryRequest request, IServerStreamWriter<RunAggregationQueryResponse> responseStream, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(responseStream);
+        ArgumentNullException.ThrowIfNull(context);
+
+        if (request.QueryTypeCase != RunAggregationQueryRequest.QueryTypeOneofCase.StructuredAggregationQuery)
+        {
+            throw new RpcException(new Status(StatusCode.Unimplemented, "Only structured aggregation queries are supported."));
+        }
+
+        var readTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
+
+        // Resolve the effective transaction ID (existing or newly started).
+        Google.Protobuf.ByteString? effectiveTransaction = null;
+        if (request.ConsistencySelectorCase == RunAggregationQueryRequest.ConsistencySelectorOneofCase.NewTransaction)
+        {
+            effectiveTransaction = transactionManager.BeginTransaction(request.NewTransaction);
+            // First response carries the new transaction ID and no result.
+            await responseStream.WriteAsync(
+                new RunAggregationQueryResponse { Transaction = effectiveTransaction, ReadTime = readTime },
+                context.CancellationToken).ConfigureAwait(false);
+        }
+        else if (request.ConsistencySelectorCase == RunAggregationQueryRequest.ConsistencySelectorOneofCase.Transaction
+                 && !request.Transaction.IsEmpty)
+        {
+            effectiveTransaction = request.Transaction;
+        }
+
+        var queryResult = await documentService.RunAggregationQueryAsync(
+            request.Parent,
+            request.StructuredAggregationQuery,
+            context.CancellationToken).ConfigureAwait(false);
+
+        // Record each scanned document against the transaction's read-set for conflict detection.
+        if (effectiveTransaction is not null)
+        {
+            foreach (var doc in queryResult.SourceDocuments)
+            {
+                transactionManager.RecordRead(effectiveTransaction, doc.Name, doc.UpdateTime);
+            }
+        }
+
+        await responseStream.WriteAsync(
+            new RunAggregationQueryResponse { Result = queryResult.AggregationResult, ReadTime = readTime },
+            context.CancellationToken).ConfigureAwait(false);
+    }
+
     public override async Task<CommitResponse> Commit(CommitRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);

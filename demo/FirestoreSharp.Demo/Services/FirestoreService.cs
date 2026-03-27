@@ -42,7 +42,11 @@ public sealed class FirestoreService
 
     public async Task UpdateAsync(TodoItem item)
     {
-        if (item.Id is null) return;
+        if (item.Id is null)
+        {
+            return;
+        }
+
         var docRef = Collection.Document(item.Id);
         await docRef.SetAsync(item, SetOptions.Overwrite).ConfigureAwait(false);
     }

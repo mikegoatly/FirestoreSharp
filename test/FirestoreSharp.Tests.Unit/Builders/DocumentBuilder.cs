@@ -224,6 +224,41 @@ internal sealed class DocumentBuilder
 
     public WriteRequest BuildWriteHandshake() => new() { Database = Database };
 
+    public RunAggregationQueryRequest BuildAggregationQueryRequest(
+        Action<StructuredAggregationQuery> configure,
+        Google.Protobuf.ByteString? transaction = null,
+        TransactionOptions? newTransaction = null)
+    {
+        var aggregationQuery = new StructuredAggregationQuery();
+
+        // Default: query the current collection with no filters
+        aggregationQuery.StructuredQuery = new StructuredQuery();
+        aggregationQuery.StructuredQuery.From.Add(new StructuredQuery.Types.CollectionSelector
+        {
+            CollectionId = _collectionId,
+            AllDescendants = false
+        });
+
+        configure(aggregationQuery);
+
+        var request = new RunAggregationQueryRequest
+        {
+            Parent = _parent,
+            StructuredAggregationQuery = aggregationQuery
+        };
+
+        if (transaction is not null)
+        {
+            request.Transaction = transaction;
+        }
+        else if (newTransaction is not null)
+        {
+            request.NewTransaction = newTransaction;
+        }
+
+        return request;
+    }
+
     public ListCollectionIdsRequest BuildListCollectionIdsRequest(string? parent = null, int pageSize = 0, string? pageToken = null)
     {
         var request = new ListCollectionIdsRequest

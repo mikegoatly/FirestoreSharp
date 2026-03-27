@@ -67,7 +67,9 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
                 foreach (var target in _targets.Values)
                 {
                     if (ProcessMutationForTarget(target, mutation))
+                    {
                         sentAny = true;
+                    }
                 }
             }
         }
@@ -77,7 +79,9 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
         // receives NO_CHANGE (with a read_time and empty target_ids).
         // Only send it when we actually wrote something to avoid spurious wakeups.
         if (sentAny)
+        {
             SendNoChange();
+        }
     }
 
     public ValueTask DisposeAsync()

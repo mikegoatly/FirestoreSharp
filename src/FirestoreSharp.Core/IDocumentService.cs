@@ -15,4 +15,5 @@ public interface IDocumentService
     Task<WriteResult> ExecuteWriteAsync(Write write, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<WriteResult>> CommitAsync(IReadOnlyList<Write> writes, IReadOnlyDictionary<string, Timestamp?>? transactionReadSet, CancellationToken cancellationToken = default);
     Task<ListCollectionIdsResult> ListCollectionIdsAsync(string parent, int pageSize, string? pageToken, CancellationToken cancellationToken = default);
+    Task<AggregationQueryResult> RunAggregationQueryAsync(string parent, StructuredAggregationQuery aggregationQuery, CancellationToken cancellationToken = default);
 }
