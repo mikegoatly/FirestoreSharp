@@ -24,9 +24,12 @@ internal static class QueryOrderer
         IEnumerable<Document> documents,
         IEnumerable<StructuredQuery.Types.Order> orderBy,
         StructuredQuery.Types.Filter? where)
-    {
-        var effectiveOrders = BuildEffectiveOrders(orderBy, where);
+        => Sort(documents, BuildEffectiveOrders(orderBy, where));
 
+    public static IReadOnlyList<Document> Sort(
+        IEnumerable<Document> documents,
+        IReadOnlyList<StructuredQuery.Types.Order> effectiveOrders)
+    {
         if (effectiveOrders.Count == 0)
         {
             // No ordering: stable insertion order (already sorted by ListAsync)

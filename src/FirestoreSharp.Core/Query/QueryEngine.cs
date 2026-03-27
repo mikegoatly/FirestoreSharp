@@ -38,10 +38,21 @@ internal static class QueryEngine
         }
 
         // 3. order_by (includes implicit __name__ appending)
-        var sorted = QueryOrderer.Sort(results, query.OrderBy, query.Where);
+        var effectiveOrders = QueryOrderer.BuildEffectiveOrders(query.OrderBy, query.Where);
+        var sorted = QueryOrderer.Sort(results, effectiveOrders);
 
-        // 4. offset + limit
+        // 4. start_at / end_at cursors (applied to the sorted list before offset + limit)
         IEnumerable<Document> paged = sorted;
+        if (query.StartAt is { Values.Count: > 0 })
+        {
+            paged = paged.Where(d => QueryCursor.IsAfterStartAt(d, query.StartAt, effectiveOrders));
+        }
+        if (query.EndAt is { Values.Count: > 0 })
+        {
+            paged = paged.Where(d => QueryCursor.IsBeforeEndAt(d, query.EndAt, effectiveOrders));
+        }
+
+        // 5. offset + limit
         if (query.Offset > 0)
         {
             paged = paged.Skip(query.Offset);
