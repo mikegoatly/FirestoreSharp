@@ -1,3 +1,4 @@
+using FirestoreSharp.Core.Listeners;
 using FirestoreSharp.Core.Query;
 
 using Google.Cloud.Firestore.V1;
@@ -7,7 +8,7 @@ using Grpc.Core;
 
 namespace FirestoreSharp.Core;
 
-internal sealed class DocumentService(IDocumentStore store) : IDocumentService, IDisposable
+internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotifier changeNotifier) : IDocumentService, IDisposable
 {
     private readonly SemaphoreSlim _commitLock = new(1, 1);
 
@@ -22,6 +23,8 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService, 
         created.UpdateTime = now;
 
         await store.CreateAsync(path, created, cancellationToken).ConfigureAwait(false);
+
+        changeNotifier.NotifyDocumentsChanged([new DocumentMutation(created.Name, created)]);
 
         return created;
     }
@@ -106,12 +109,18 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService, 
             updated.Fields.Add(document.Fields);
         }
 
-        return await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
+        var result = await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
+
+        changeNotifier.NotifyDocumentsChanged([new DocumentMutation(result.Name, result)]);
+
+        return result;
     }
 
     public async Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
         await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
+
+        changeNotifier.NotifyDocumentsChanged([new DocumentMutation(path.ResourceName, null)]);
     }
 
     public async Task<IReadOnlyList<Document>> RunQueryAsync(string parent, StructuredQuery query, CancellationToken cancellationToken = default)
@@ -195,7 +204,9 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService, 
                         await store.UpdateAsync(path, updated, cancellationToken).ConfigureAwait(false);
                     }
 
-                    return new WriteResult { UpdateTime = now };
+                    var writeResult = new WriteResult { UpdateTime = now };
+                    changeNotifier.NotifyDocumentsChanged([new DocumentMutation(updated.Name, updated)]);
+                    return writeResult;
                 }
 
             case Write.OperationOneofCase.Delete:
@@ -208,6 +219,7 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService, 
                     if (existing is not null)
                     {
                         await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
+                        changeNotifier.NotifyDocumentsChanged([new DocumentMutation(path.ResourceName, null)]);
                     }
 
                     return new WriteResult(); // no update_time after a delete
@@ -300,10 +312,20 @@ internal sealed class DocumentService(IDocumentStore store) : IDocumentService, 
 
             // 3. Apply phase: execute all mutations (infallible after prepare)
             var results = new List<WriteResult>(mutations.Count);
+            var documentMutations = new List<DocumentMutation>(mutations.Count);
+
             foreach (var mutation in mutations)
             {
                 await ApplyMutationAsync(mutation, cancellationToken).ConfigureAwait(false);
                 results.Add(mutation.Result);
+                documentMutations.Add(new DocumentMutation(
+                    mutation.Path.ResourceName,
+                    mutation.Type == MutationType.Delete ? null : mutation.Document));
+            }
+
+            if (documentMutations is { Count: > 0 })
+            {
+                changeNotifier.NotifyDocumentsChanged(documentMutations);
             }
 
             return results;

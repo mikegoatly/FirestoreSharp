@@ -4,20 +4,12 @@ using Google.Protobuf.WellKnownTypes;
 
 namespace FirestoreSharp.Core.Transactions;
 
-internal sealed class TransactionState
+internal sealed class TransactionState(ByteString id, TransactionOptions.ModeOneofCase mode, DateTimeOffset startTime)
 {
-    public TransactionState(ByteString id, TransactionOptions.ModeOneofCase mode, DateTimeOffset startTime)
-    {
-        Id = id;
-        Mode = mode;
-        StartTime = startTime;
-        ExpiresAt = startTime.AddSeconds(60);
-    }
-
-    public ByteString Id { get; }
-    public TransactionOptions.ModeOneofCase Mode { get; }
-    public DateTimeOffset StartTime { get; }
-    public DateTimeOffset ExpiresAt { get; }
+    public ByteString Id { get; } = id;
+    public TransactionOptions.ModeOneofCase Mode { get; } = mode;
+    public DateTimeOffset StartTime { get; } = startTime;
+    public DateTimeOffset ExpiresAt { get; } = startTime.AddSeconds(60);
 
     /// <summary>
     /// Tracks documents read during this transaction.

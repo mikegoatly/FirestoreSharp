@@ -1,4 +1,5 @@
 using FirestoreSharp.Core;
+using FirestoreSharp.Core.Listeners;
 using FirestoreSharp.Core.Transactions;
 
 using Google.Cloud.Firestore.V1;
@@ -7,10 +8,12 @@ using Google.Protobuf.WellKnownTypes;
 
 using Grpc.Core;
 
+using Microsoft.AspNetCore.Connections;
+
 namespace FirestoreSharp.Server.Services;
 
 #pragma warning disable CA1515 // Consider making public types internal
-public sealed class FirestoreGrpcService(IDocumentService documentService, ITransactionManager transactionManager) : Firestore.FirestoreBase
+public sealed class FirestoreGrpcService(IDocumentService documentService, ITransactionManager transactionManager, IListenerService listenerService) : Firestore.FirestoreBase
 #pragma warning restore CA1515 // Consider making public types internal
 {
     public override async Task<Document> CreateDocument(CreateDocumentRequest request, ServerCallContext context)
@@ -299,6 +302,70 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
             response.WriteResults.Add(results);
 
             await responseStream.WriteAsync(response, context.CancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    public override async Task Listen(
+        IAsyncStreamReader<ListenRequest> requestStream,
+        IServerStreamWriter<ListenResponse> responseStream,
+        ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(requestStream);
+        ArgumentNullException.ThrowIfNull(responseStream);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var connection = listenerService.CreateConnection();
+        Task? writerTask = null;
+        try
+        {
+            // Background task: read from the connection's channel and write to the gRPC response stream.
+            writerTask = Task.Run(async () =>
+            {
+                await foreach (var response in connection.Responses.ReadAllAsync(context.CancellationToken).ConfigureAwait(false))
+                {
+                    await responseStream.WriteAsync(response, context.CancellationToken).ConfigureAwait(false);
+                }
+            }, context.CancellationToken);
+
+            // Main loop: read client ListenRequests and dispatch them.
+            while (await requestStream.MoveNext(context.CancellationToken).ConfigureAwait(false))
+            {
+                var request = requestStream.Current;
+
+                switch (request.TargetChangeCase)
+                {
+                    case ListenRequest.TargetChangeOneofCase.AddTarget:
+                        await connection.AddTargetAsync(request.AddTarget, context.CancellationToken).ConfigureAwait(false);
+                        break;
+
+                    case ListenRequest.TargetChangeOneofCase.RemoveTarget:
+                        connection.RemoveTarget(request.RemoveTarget);
+                        break;
+                }
+            }
+        }
+        finally
+        {
+            // Dispose the connection first — this completes the channel, which lets the writer task
+            // drain and exit naturally rather than block forever.
+            try
+            {
+                await connection.DisposeAsync().ConfigureAwait(false);
+            }
+            catch (ConnectionAbortedException) { }
+
+            // Await the writer task to observe any exceptions. Swallow cancellation and gRPC
+            // connectivity failures (connection reset, client disconnect) since those aren't bugs —
+            // any genuine unexpected exception will still propagate from here.
+            if (writerTask is not null)
+            {
+                try
+                {
+                    await writerTask.ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) { }
+                catch (RpcException ex) when (ex.StatusCode is StatusCode.Cancelled or StatusCode.Unavailable) { }
+            }
         }
     }
 }

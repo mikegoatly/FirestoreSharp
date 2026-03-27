@@ -60,7 +60,7 @@ internal static class QueryEngine
     /// Returns <c>true</c> if <paramref name="document"/> belongs to one of the collections
     /// described by <paramref name="selectors"/>.
     /// </summary>
-    private static bool MatchesCollection(
+    internal static bool MatchesCollection(
         Document document,
         string parent,
         IEnumerable<StructuredQuery.Types.CollectionSelector> selectors)

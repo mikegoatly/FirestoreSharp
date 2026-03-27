@@ -105,7 +105,24 @@ memory limitations.
 
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
-| `Listen` | `ListenRequest` | `ListenResponse` | **Bidirectional streaming** | Not implemented |
+| `Listen` | `ListenRequest` | `ListenResponse` | **Bidirectional streaming** | ✅ Done (partial — see below) |
+
+#### Listen — Supported Features
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Document targets (watch specific documents) | ✅ | Initial snapshot + live create/update/delete notifications |
+| Query targets (watch a structured query) | ✅ | Initial snapshot + live notifications for matching documents |
+| `TargetChange` lifecycle (ADD, REMOVE, CURRENT) | ✅ | Sent during target registration and removal |
+| `DocumentChange` notifications | ✅ | Sent when a watched/matching document is created or updated |
+| `DocumentDelete` notifications | ✅ | Sent when a watched/matching document is deleted |
+| `DocumentRemove` notifications | ✅ | Sent when a document no longer matches a query target |
+| Multiple targets per stream | ✅ | Add/remove targets dynamically |
+| Target ID auto-assignment (`target_id = 0`) | ✅ | Server assigns a unique ID |
+| Resume tokens (`resume_token` / `read_time`) | ❌ Not implemented | |
+| `ExistenceFilter` / BloomFilter reconciliation | ❌ Not implemented | |
+| `once` flag (single snapshot then remove) | ❌ Not implemented | |
+| Limit-based removal tracking | ❌ Not implemented | Query limit overflow won't send `DocumentRemove` |
 
 ### Collection Management
 
