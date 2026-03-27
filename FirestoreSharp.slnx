@@ -7,4 +7,7 @@
   <Folder Name="/test/">
     <Project Path="test/FirestoreSharp.Tests.Unit/FirestoreSharp.Tests.Unit.csproj" />
   </Folder>
+  <Folder Name="/demo/">
+    <Project Path="demo/FirestoreSharp.Demo/FirestoreSharp.Demo.csproj" />
+  </Folder>
 </Solution>
