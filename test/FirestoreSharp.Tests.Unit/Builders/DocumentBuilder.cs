@@ -223,5 +223,21 @@ internal sealed class DocumentBuilder
     }
 
     public WriteRequest BuildWriteHandshake() => new() { Database = Database };
+
+    public ListCollectionIdsRequest BuildListCollectionIdsRequest(string? parent = null, int pageSize = 0, string? pageToken = null)
+    {
+        var request = new ListCollectionIdsRequest
+        {
+            Parent = parent ?? _parent,
+            PageSize = pageSize
+        };
+
+        if (pageToken is not null)
+        {
+            request.PageToken = pageToken;
+        }
+
+        return request;
+    }
 }
 

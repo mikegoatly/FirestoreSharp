@@ -96,6 +96,27 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         }
     }
 
+    public override async Task<ListCollectionIdsResponse> ListCollectionIds(ListCollectionIdsRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+
+        var result = await documentService.ListCollectionIdsAsync(
+            request.Parent,
+            request.PageSize,
+            string.IsNullOrEmpty(request.PageToken) ? null : request.PageToken,
+            context.CancellationToken).ConfigureAwait(false);
+
+        var response = new ListCollectionIdsResponse();
+        response.CollectionIds.AddRange(result.CollectionIds);
+        if (result.NextPageToken is not null)
+        {
+            response.NextPageToken = result.NextPageToken;
+        }
+
+        return response;
+    }
+
     public override async Task<ListDocumentsResponse> ListDocuments(ListDocumentsRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);

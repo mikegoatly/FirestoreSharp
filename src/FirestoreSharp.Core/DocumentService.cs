@@ -123,6 +123,57 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         changeNotifier.NotifyDocumentsChanged([new DocumentMutation(path.ResourceName, null)]);
     }
 
+    public async Task<ListCollectionIdsResult> ListCollectionIdsAsync(string parent, int pageSize, string? pageToken, CancellationToken cancellationToken = default)
+    {
+        const int defaultPageSize = 300;
+        var effectivePageSize = pageSize > 0 ? pageSize : defaultPageSize;
+
+        // Documents live at "{parent}/{collectionId}/{documentId}/..." so we need
+        // the prefix "{parent}/" to find all descendants, then extract the immediate
+        // child collection segment.
+        var parentPrefix = parent.EndsWith('/') ? parent : $"{parent}/";
+
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var collectionIds = new List<string>();
+        string? nextPageToken = null;
+
+        await foreach (var document in store.ListAsync(parentPrefix, cancellationToken).ConfigureAwait(false))
+        {
+            // Strip the parent prefix to get "collectionId/docId[/...]"
+            var remainder = document.Name.AsSpan()[parentPrefix.Length..];
+            var slash = remainder.IndexOf('/');
+
+            // Each document must have at least one slash (collectionId/docId)
+            if (slash <= 0)
+            {
+                continue;
+            }
+
+            var collectionId = remainder[..slash].ToString();
+
+            // Page token is the last collection ID returned on the previous page;
+            // skip until we pass it (ordinal ordering matches store ordering).
+            if (!string.IsNullOrEmpty(pageToken)
+                && string.Compare(collectionId, pageToken, StringComparison.Ordinal) <= 0)
+            {
+                continue;
+            }
+
+            if (seen.Add(collectionId))
+            {
+                if (collectionIds.Count >= effectivePageSize)
+                {
+                    nextPageToken = collectionIds[^1];
+                    break;
+                }
+
+                collectionIds.Add(collectionId);
+            }
+        }
+
+        return new ListCollectionIdsResult(collectionIds, nextPageToken);
+    }
+
     public async Task<IReadOnlyList<Document>> RunQueryAsync(string parent, StructuredQuery query, CancellationToken cancellationToken = default)
     {
         var candidates = new List<Document>();

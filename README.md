@@ -128,7 +128,7 @@ memory limitations.
 
 | RPC | Request | Response | Streaming | Status |
 |-----|---------|----------|-----------|-------------|
-| `ListCollectionIds` | `ListCollectionIdsRequest` | `ListCollectionIdsResponse` | Unary | Not implemented |
+| `ListCollectionIds` | `ListCollectionIdsRequest` | `ListCollectionIdsResponse` | Unary | ✅ Done |
 
 ## Storage Layer
 
