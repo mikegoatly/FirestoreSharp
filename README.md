@@ -23,6 +23,11 @@ FIRESTORE_EMULATOR_HOST=localhost:5017
 
 See [Running with Docker](#running-with-docker) for persistent storage and Docker Compose examples.
 
+There's a demo .NET Avalonia UI that uses the official Google Firestore SDK to connect to the emulator and perform operations.
+This is the demo UI and the emulator UI running side-by-side, both connected to the same emulator instance:
+
+![Demo UI and Emulator UI side-by-side](docs/images/demo-ui.png)
+
 # Progress and Roadmap
 
 ## RPC Methods
