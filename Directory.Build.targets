@@ -1,0 +1,8 @@
+<Project>
+
+  <Target Name="HuskyInstall" AfterTargets="Restore" Condition="'$(HUSKY)' != '0'">
+    <Exec Command="dotnet husky install" StandardOutputImportance="Low" StandardErrorImportance="Low"
+          WorkingDirectory="$(MSBuildThisFileDirectory)" />
+  </Target>
+
+</Project>
