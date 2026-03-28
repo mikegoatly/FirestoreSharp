@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/mikegoatly/FirestoreSharp/compare/v1.0.0...v1.0.1) (2026-03-28)
+
+
+### Bug Fixes
+
+* trigger initial release ([fe53073](https://github.com/mikegoatly/FirestoreSharp/commit/fe53073151a3e64988c433049fba34eb78e68367))
+
 ## 1.0.0 (2026-03-28)
 
 
