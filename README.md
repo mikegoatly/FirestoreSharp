@@ -2,12 +2,26 @@
 
 > This is very early stage work-in-progress. The API and design are not finalized and are subject to change.
 
-This project is an open source .NET emulator for Google Cloud Firestore. It is designed to provide a local development environment 
+This project is an open source .NET emulator for Google Cloud Firestore. It is designed to provide a local development environment
 for testing and development purposes without the need to connect to the actual Firestore service.
 
-The motivation behind this project is to avoid the memory challenges faced when using the official Firestore emulator. By having the 
-option to use a file-based storage approach, FirestoreSharp allows for larger datasets to be handled without running into 
+The motivation behind this project is to avoid the memory challenges faced when using the official Firestore emulator. By having the
+option to use a file-based storage approach, FirestoreSharp allows for larger datasets to be handled without running into
 memory limitations.
+
+## Quick start
+
+```bash
+docker run --rm -p 5017:5017 -p 5018:5018 ghcr.io/mikegoatly/firestoresharp:latest
+```
+
+Then open `http://localhost:5018/ui` in a browser, and point your Firestore client at the emulator:
+
+```bash
+FIRESTORE_EMULATOR_HOST=localhost:5017
+```
+
+See [Running with Docker](#running-with-docker) for persistent storage and Docker Compose examples.
 
 # Progress and Roadmap
 
