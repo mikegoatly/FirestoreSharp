@@ -1,5 +1,7 @@
 <Solution>
-  <Folder Name="/Solution Items/" />
+  <Folder Name="/Solution Items/">
+    <File Path="README.md" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/FirestoreSharp.Core/FirestoreSharp.Core.csproj" />
     <Project Path="src/FirestoreSharp.Server/FirestoreSharp.Server.csproj" />

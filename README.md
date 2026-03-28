@@ -171,7 +171,71 @@ Read-write transactions use a **per-document overlay store** for snapshot isolat
 - File-based storage implementation
 - In-memory storage implementation
 
-## Releases
+## Running with Docker
 
-The plan is to make this available as a self contained docker container as well. Other options, including
-a self hosted library, dotnet tool, etc. will also be considered.
+Pre-built images are published to the GitHub Container Registry on every release:
+
+```
+ghcr.io/mikegoatly/firestoresharp:latest
+ghcr.io/mikegoatly/firestoresharp:<version>
+```
+
+### Ports
+
+| Port | Purpose |
+|------|---------|
+| `5017` | gRPC endpoint (HTTP/2) — point your Firestore client here |
+| `5018` | Web UI (HTTP/1.1) — open in a browser to inspect and edit data |
+
+### Quick start (in-memory store)
+
+```bash
+docker run --rm -p 5017:5017 -p 5018:5018 ghcr.io/mikegoatly/firestoresharp:latest
+```
+
+Then open `http://localhost:5018/ui` in a browser, and point your Firestore client at the emulator:
+
+```bash
+FIRESTORE_EMULATOR_HOST=localhost:5017
+```
+
+### Persistent storage
+
+Mount a host directory and use the file-system store to keep data between container restarts:
+
+**Bash:**
+```bash
+docker run --rm \
+  -p 5017:5017 \
+  -p 5018:5018 \
+  -v /path/to/data:/data \
+  ghcr.io/mikegoatly/firestoresharp:latest \
+  --store FileSystem --store-path /data
+```
+
+**PowerShell:**
+```powershell
+docker run --rm `
+  -p 5017:5017 `
+  -p 5018:5018 `
+  -v \path\to\data:/data `
+  ghcr.io/mikegoatly/firestoresharp:latest `
+  --store FileSystem --store-path /data
+```
+
+### Docker Compose example
+
+```yaml
+services:
+  firestore:
+    image: ghcr.io/mikegoatly/firestoresharp:latest
+    ports:
+      - "5017:5017"   # gRPC
+      - "5018:5018"   # Web UI
+    volumes:
+      - firestore-data:/data
+    command: ["--store", "FileSystem", "--store-path", "/data"]
+
+volumes:
+  firestore-data:
+```

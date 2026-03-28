@@ -16,7 +16,15 @@ FROM mcr.microsoft.com/dotnet/runtime-deps:10.0 AS runtime
 WORKDIR /app
 COPY --from=build /app/publish .
 
-EXPOSE 8080
+# 5017: gRPC (HTTP/2)
+# 5018: Web UI (HTTP/1.1)
+EXPOSE 5017
+EXPOSE 5018
+
+ENV ASPNETCORE_Kestrel__Endpoints__Grpc__Url=http://+:5017
+ENV ASPNETCORE_Kestrel__Endpoints__Grpc__Protocols=Http2
+ENV ASPNETCORE_Kestrel__Endpoints__Ui__Url=http://+:5018
+ENV ASPNETCORE_Kestrel__Endpoints__Ui__Protocols=Http1
 
 ENTRYPOINT ["./FirestoreSharp.Server"]
 CMD ["--store", "InMemory"]

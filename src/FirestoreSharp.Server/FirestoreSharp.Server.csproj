@@ -23,4 +23,10 @@
     <ProjectReference Include="..\FirestoreSharp.Core\FirestoreSharp.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <EmbeddedResource Include="UI\wwwroot\index.html" />
+    <EmbeddedResource Include="UI\wwwroot\app.js" />
+    <EmbeddedResource Include="UI\wwwroot\style.css" />
+  </ItemGroup>
+
 </Project>

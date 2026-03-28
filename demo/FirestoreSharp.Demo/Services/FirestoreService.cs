@@ -7,7 +7,7 @@ namespace FirestoreSharp.Demo.Services;
 public sealed class FirestoreService
 {
     private const string EmulatorHost = "localhost:5017";
-    private const string ProjectId = "demo-project";
+    private const string ProjectId = "local";
     private const string CollectionName = "todos";
 
     private readonly FirestoreDb _db;

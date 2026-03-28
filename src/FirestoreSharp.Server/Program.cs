@@ -4,10 +4,14 @@ using FirestoreSharp.Core.Stores.FileSystem;
 using FirestoreSharp.Core.Stores.InMemory;
 using FirestoreSharp.Core.Transactions;
 using FirestoreSharp.Server.Services;
+using FirestoreSharp.Server.UI;
 
 var builder = WebApplication.CreateSlimBuilder(args);
 
 builder.WebHost.UseKestrelHttpsConfiguration();
+
+builder.Services.ConfigureHttpJsonOptions(o =>
+    o.SerializerOptions.TypeInfoResolverChain.Insert(0, FirestoreJsonContext.Default));
 
 builder.Services.AddGrpc();
 builder.Services.AddSingleton<IDocumentService, DocumentService>();
@@ -41,8 +45,9 @@ else
 
 var app = builder.Build();
 
+app.MapFirestoreUi();
 app.MapGrpcService<FirestoreGrpcService>();
-app.MapGet("/", () => "FirestoreSharp gRPC emulator");
+app.MapGet("/", () => Results.Redirect("/ui"));
 
 app.Run();
 

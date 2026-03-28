@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FirestoreSharp Emulator</title>
+  <link rel="stylesheet" href="/ui/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-left">
+      <svg class="logo" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12 4.16-1.26 8-6.45 8-12V6L12 2z" fill="#FF6D00" opacity="0.9"/>
+        <path d="M12 2L4 6v6c0 5.55 3.84 10.74 8 12V2z" fill="#FF6D00"/>
+      </svg>
+      <span class="app-name">FirestoreSharp</span>
+    </div>
+    <div class="header-center">
+      <span class="meta-label">Project:</span>
+      <span id="meta-project" class="meta-value">—</span>
+      <span class="meta-sep">/</span>
+      <span class="meta-label">Database:</span>
+      <span id="meta-database" class="meta-value">—</span>
+    </div>
+    <div class="header-right"></div>
+  </header>
+
+  <nav class="breadcrumb" id="breadcrumb">
+    <span class="breadcrumb-item active" data-index="-1">Root</span>
+  </nav>
+
+  <div class="workspace">
+    <!-- Collections panel -->
+    <aside class="panel panel-collections" id="collections-panel">
+      <div class="panel-header">
+        <span class="panel-title">Collections</span>
+        <button class="btn-icon" id="btn-new-collection" title="Start a new collection">+</button>
+      </div>
+      <div class="panel-body" id="collections-list">
+        <div class="empty-state">Loading…</div>
+      </div>
+    </aside>
+
+    <!-- Documents panel -->
+    <section class="panel panel-documents" id="documents-panel">
+      <div class="panel-header">
+        <span class="panel-title" id="documents-panel-title">Select a collection</span>
+        <button class="btn-icon hidden" id="btn-new-document" title="Add a document">+</button>
+      </div>
+      <div class="panel-body" id="documents-list">
+        <div class="empty-state">Select a collection to view documents.</div>
+      </div>
+    </section>
+
+    <!-- Document editor panel -->
+    <aside class="panel panel-editor hidden" id="editor-panel">
+      <div class="panel-header">
+        <span class="panel-title" id="editor-title">Document</span>
+        <div class="editor-actions">
+          <button class="btn-sm btn-secondary hidden" id="btn-edit-doc">Edit</button>
+          <button class="btn-sm btn-danger hidden" id="btn-delete-doc">Delete</button>
+          <button class="btn-sm btn-primary hidden" id="btn-save-doc">Save</button>
+          <button class="btn-sm btn-secondary hidden" id="btn-cancel-edit">Cancel</button>
+          <button class="btn-icon" id="btn-close-editor">✕</button>
+        </div>
+      </div>
+      <div class="panel-body" id="editor-body">
+        <!-- view mode -->
+        <div id="editor-view"></div>
+        <!-- edit mode -->
+        <div id="editor-edit" class="hidden">
+          <div class="editor-help">
+            Edit fields as JSON. Each field: <code>{"type": "string", "value": "hello"}</code><br>
+            Types: <code>string</code>, <code>int</code>, <code>double</code>, <code>bool</code>, <code>null</code>, <code>timestamp</code>, <code>bytes</code>, <code>reference</code>, <code>geopoint</code>, <code>array</code>, <code>map</code>
+          </div>
+          <textarea id="editor-textarea" spellcheck="false"></textarea>
+          <div id="editor-error" class="editor-error hidden"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- New collection modal -->
+  <div class="modal hidden" id="modal-new-collection">
+    <div class="modal-backdrop"></div>
+    <div class="modal-dialog">
+      <h3>New collection</h3>
+      <label>Collection ID
+        <input type="text" id="new-collection-id" placeholder="e.g. users" autocomplete="off">
+      </label>
+      <div class="modal-error hidden" id="new-collection-error"></div>
+      <div class="modal-actions">
+        <button class="btn-sm btn-secondary" id="btn-cancel-collection">Cancel</button>
+        <button class="btn-sm btn-primary" id="btn-confirm-collection">Create</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/ui/app.js"></script>
+</body>
+</html>
