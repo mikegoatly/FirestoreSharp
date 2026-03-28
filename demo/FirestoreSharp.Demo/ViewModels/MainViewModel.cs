@@ -79,11 +79,14 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                     switch (change.ChangeType)
                     {
                         case DocumentChange.Type.Added:
+                            if (FindById(change.Document.Id) is null)
+                            {
+                                Items.Add(new TodoItemViewModel(item));
+                            }
                             LogActivity($"[{timestamp}] ADDED: {item.Title} ({change.Document.Id})");
                             break;
 
                         case DocumentChange.Type.Modified:
-                            // Update the item in-place if it exists.
                             var existing = FindById(change.Document.Id);
                             if (existing is not null)
                             {
@@ -104,6 +107,34 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 }
             });
         });
+    }
+
+    [RelayCommand]
+    private async Task AddBatchAsync()
+    {
+        var now = DateTime.Now;
+        var items = Enumerable.Range(1, 5)
+            .Select(i => new TodoItem { Title = $"Todo {now:HH:mm:ss} #{i}" })
+            .ToList();
+
+        try
+        {
+            var ids = await _firestore.CreateBatchAsync(items).ConfigureAwait(false);
+
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                for (var i = 0; i < items.Count; i++)
+                {
+                    items[i].Id = ids[i];
+                    Items.Add(new TodoItemViewModel(items[i]));
+                }
+                LogActivity($"[{DateTime.Now:HH:mm:ss.fff}] BATCH: created {items.Count} todos in one transaction");
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => LogActivity($"ERROR batch create: {ex.Message}"));
+        }
     }
 
     [RelayCommand]

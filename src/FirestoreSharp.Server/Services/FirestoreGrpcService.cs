@@ -31,10 +31,14 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         ArgumentNullException.ThrowIfNull(context);
 
         var path = DocumentPath.Parse(request.Name);
-        var doc = await documentService.GetAsync(path, context.CancellationToken).ConfigureAwait(false);
 
-        if (request.ConsistencySelectorCase == GetDocumentRequest.ConsistencySelectorOneofCase.Transaction
-            && !request.Transaction.IsEmpty)
+        var isTransactional = request.ConsistencySelectorCase == GetDocumentRequest.ConsistencySelectorOneofCase.Transaction
+                              && !request.Transaction.IsEmpty;
+
+        var overlay = isTransactional ? transactionManager.GetOverlay(request.Transaction) : null;
+        var doc = await documentService.GetAsync(path, overlay, context.CancellationToken).ConfigureAwait(false);
+
+        if (isTransactional)
         {
             transactionManager.RecordRead(request.Transaction, doc.Name, doc.UpdateTime);
         }
@@ -72,7 +76,9 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         var isTransactional = request.ConsistencySelectorCase == BatchGetDocumentsRequest.ConsistencySelectorOneofCase.Transaction
                               && !request.Transaction.IsEmpty;
 
-        await foreach (var result in documentService.BatchGetAsync([.. request.Documents], context.CancellationToken).ConfigureAwait(false))
+        var overlay = isTransactional ? transactionManager.GetOverlay(request.Transaction) : null;
+
+        await foreach (var result in documentService.BatchGetAsync([.. request.Documents], overlay, context.CancellationToken).ConfigureAwait(false))
         {
             var response = result switch
             {
@@ -183,9 +189,12 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         var isTransactional = request.ConsistencySelectorCase == RunQueryRequest.ConsistencySelectorOneofCase.Transaction
                               && !request.Transaction.IsEmpty;
 
+        var overlay = isTransactional ? transactionManager.GetOverlay(request.Transaction) : null;
+
         var documents = await documentService.RunQueryAsync(
             request.Parent,
             request.StructuredQuery,
+            overlay,
             context.CancellationToken).ConfigureAwait(false);
 
         foreach (var document in documents)
@@ -235,9 +244,12 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
             effectiveTransaction = request.Transaction;
         }
 
+        var aggregationOverlay = effectiveTransaction is not null ? transactionManager.GetOverlay(effectiveTransaction) : null;
+
         var queryResult = await documentService.RunAggregationQueryAsync(
             request.Parent,
             request.StructuredAggregationQuery,
+            aggregationOverlay,
             context.CancellationToken).ConfigureAwait(false);
 
         // Record each scanned document against the transaction's read-set for conflict detection.
@@ -260,6 +272,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         ArgumentNullException.ThrowIfNull(context);
 
         IReadOnlyDictionary<string, Timestamp?>? readSet = null;
+        IDocumentStore? overlay = null;
 
         if (!request.Transaction.IsEmpty)
         {
@@ -269,12 +282,14 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
             }
 
             readSet = transactionManager.GetReadSet(request.Transaction);
+            overlay = transactionManager.GetOverlay(request.Transaction);
             transactionManager.Complete(request.Transaction);
         }
 
         var results = await documentService.CommitAsync(
             [.. request.Writes],
             readSet,
+            overlay,
             context.CancellationToken).ConfigureAwait(false);
 
         var commitTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
@@ -387,6 +402,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
 
             var results = await documentService.CommitAsync(
                 [.. request.Writes],
+                null,
                 null,
                 context.CancellationToken).ConfigureAwait(false);
 

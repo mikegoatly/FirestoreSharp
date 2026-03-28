@@ -9,6 +9,7 @@ namespace FirestoreSharp.Core.Transactions
         ByteString BeginTransaction(TransactionOptions? options);
         void Complete(ByteString transactionId);
         IReadOnlyDictionary<string, Timestamp?> GetReadSet(ByteString transactionId);
+        IDocumentStore? GetOverlay(ByteString transactionId);
         void RecordRead(ByteString transactionId, string documentResourceName, Timestamp? updateTime);
         void ValidateAndComplete(ByteString transactionId);
         void ValidateCanWrite(ByteString transactionId);

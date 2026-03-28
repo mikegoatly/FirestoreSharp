@@ -323,7 +323,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
             new Write { Update = d2.Build() },
         };
 
-        await _documentService.CommitAsync(writes, null, ct);
+        await _documentService.CommitAsync(writes, null, null, ct);
 
         var c1 = await AssertDocumentChangeAsync(connection, ct);
         var c2 = await AssertDocumentChangeAsync(connection, ct);

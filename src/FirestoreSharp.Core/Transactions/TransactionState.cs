@@ -1,15 +1,23 @@
+using FirestoreSharp.Core.Stores.Overlay;
+
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
 
 namespace FirestoreSharp.Core.Transactions;
 
-internal sealed class TransactionState(ByteString id, TransactionOptions.ModeOneofCase mode, DateTimeOffset startTime)
+internal sealed class TransactionState(ByteString id, TransactionOptions.ModeOneofCase mode, DateTimeOffset startTime, OverlayStore? overlay)
 {
     public ByteString Id { get; } = id;
     public TransactionOptions.ModeOneofCase Mode { get; } = mode;
     public DateTimeOffset StartTime { get; } = startTime;
     public DateTimeOffset ExpiresAt { get; } = startTime.AddSeconds(60);
+
+    /// <summary>
+    /// The overlay store for this transaction. Only set for read-write transactions.
+    /// Null for read-only transactions.
+    /// </summary>
+    public OverlayStore? Overlay { get; } = overlay;
 
     /// <summary>
     /// Tracks documents read during this transaction.

@@ -1,4 +1,7 @@
 using System.Collections.Concurrent;
+
+using FirestoreSharp.Core.Stores.Overlay;
+
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf;
 using Google.Protobuf.WellKnownTypes;
@@ -6,7 +9,7 @@ using Grpc.Core;
 
 namespace FirestoreSharp.Core.Transactions;
 
-internal sealed class TransactionManager : ITransactionManager
+internal sealed class TransactionManager(IDocumentStore baseStore) : ITransactionManager
 {
     private readonly ConcurrentDictionary<ByteString, TransactionState> _active = new();
 
@@ -16,7 +19,14 @@ internal sealed class TransactionManager : ITransactionManager
 
         var mode = options?.ModeCase ?? TransactionOptions.ModeOneofCase.ReadWrite;
         var id = ByteString.New();
-        var state = new TransactionState(id, mode, DateTimeOffset.UtcNow);
+
+        // Read-write transactions get an overlay store for snapshot isolation.
+        // Read-only transactions don't write, so no overlay is needed.
+        var overlay = mode == TransactionOptions.ModeOneofCase.ReadWrite
+            ? new OverlayStore(baseStore)
+            : null;
+
+        var state = new TransactionState(id, mode, DateTimeOffset.UtcNow, overlay);
 
         _active[id] = state;
         return id;
@@ -50,6 +60,12 @@ internal sealed class TransactionManager : ITransactionManager
     {
         var state = GetTransaction(transactionId);
         return state.GetReadSet();
+    }
+
+    public IDocumentStore? GetOverlay(ByteString transactionId)
+    {
+        var state = GetTransaction(transactionId);
+        return state.Overlay;
     }
 
     public void Complete(ByteString transactionId)

@@ -73,7 +73,7 @@ memory limitations.
 | Up to 5 aggregations per query | ✅ | Returns `INVALID_ARGUMENT` if violated |
 | Inner `StructuredQuery` (filters, cursors, limit, offset) | ✅ | Full query pipeline applied before aggregation |
 | `consistency_selector` — existing transaction | ✅ | |
-| `consistency_selector` — `new_transaction` | ✅ | Transaction ID returned in first streaming response; scanned documents recorded in the transaction read-set. Note: only documents that existed at query time are tracked — inserts of new matching documents after the read are not detected as conflicts (no MVCC). |
+| `consistency_selector` — `new_transaction` | ✅ | Transaction ID returned in first streaming response; scanned documents recorded in the transaction read-set. Note: only documents that existed at query time are tracked — inserts of new matching documents after the read are not detected as conflicts. |
 | `consistency_selector` — `read_time` | ❌ Not implemented | |
 | `explain_options` | ❌ Not implemented | |
 
@@ -97,9 +97,28 @@ memory limitations.
 | 60-second idle expiry | ✅ | |
 | Transaction-scoped reads (Get, BatchGet, RunQuery) | ✅ | Read-set tracked for conflict detection |
 | Read-only transaction commit (no writes) | ✅ | |
+| Per-document snapshot isolation (overlay store) | ✅ | See note below |
 | Pessimistic concurrency (document locking) | ❌ Not implemented | Optimistic only |
-| True snapshot isolation (MVCC) | ❌ Not implemented | Reads return current state; conflicts caught at commit |
+| Global snapshot isolation (true MVCC) | ❌ Not implemented | See note below |
+| Write skew detection | ❌ Not implemented | See note below |
 | 500-document transaction limit | ✅ | Enforced — rejects with `INVALID_ARGUMENT` |
+
+#### Transaction Consistency — What Is and Isn't Implemented
+
+Read-write transactions use a **per-document overlay store** for snapshot isolation. When a document is first read inside a transaction, its state is promoted into a private overlay. All subsequent reads of the same document within that transaction return the overlaid snapshot, not the live base store — so a document read twice in a transaction always returns the same value, even if another transaction committed a change in between.
+
+**What this provides:**
+
+- A document read multiple times within a transaction always returns the same value.
+- Writes buffered in a transaction are not visible to other readers until commit.
+- Intra-transaction reads see intra-transaction writes (the overlay is the prepare-phase source).
+- Conflict detection (`ABORTED`) fires when a read document is externally modified before commit.
+
+**What this does NOT provide (compared to real Firestore):**
+
+- **Global snapshot time.** In real Firestore, all reads in a transaction see the database as of a single point in time (the transaction start). Here, the snapshot time is per-document — each document is snapshotted at the moment it is first read within the transaction. If doc A is read at T1 and doc B is read at T2 > T1, they may reflect different logical moments. In practice this window is small, but it is a difference from the real service.
+- **Write skew detection.** Two transactions can each read an overlapping set of documents and each write based on what they read, without either transaction's conflict check firing, if they write to different documents. The combined effect may violate an application-level invariant. The real Firestore uses serializable snapshot isolation which detects this; FirestoreSharp does not.
+- **Serializable isolation.** As a consequence of the above, FirestoreSharp provides snapshot isolation (with per-document rather than global snapshot time), not full serializability.
 
 ### Batch/Streaming Writes
 

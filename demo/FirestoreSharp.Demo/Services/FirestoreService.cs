@@ -58,6 +58,26 @@ public sealed class FirestoreService
     }
 
     /// <summary>
+    /// Creates multiple todo items in a single atomic transaction.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> CreateBatchAsync(IReadOnlyList<TodoItem> items)
+    {
+        var refs = items.Select(_ => Collection.Document()).ToList();
+
+        await _db.RunTransactionAsync(transaction =>
+        {
+            foreach (var (item, docRef) in items.Zip(refs))
+            {
+                transaction.Create(docRef, item);
+            }
+
+            return Task.CompletedTask;
+        }).ConfigureAwait(false);
+
+        return refs.Select(r => r.Id).ToList();
+    }
+
+    /// <summary>
     /// Starts a real-time listener on the todos collection.
     /// <paramref name="onChanged"/> is called each time a snapshot arrives.
     /// Returns the <see cref="FirestoreChangeListener"/> (dispose to stop listening).

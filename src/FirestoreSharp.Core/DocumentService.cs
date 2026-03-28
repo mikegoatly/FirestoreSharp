@@ -29,18 +29,19 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         return created;
     }
 
-    public async Task<Document> GetAsync(DocumentPath path, CancellationToken cancellationToken = default)
+    public async Task<Document> GetAsync(DocumentPath path, IDocumentStore? storeOverride = null, CancellationToken cancellationToken = default)
     {
-        return await store.GetAsync(path, cancellationToken).ConfigureAwait(false);
+        return await (storeOverride ?? store).GetAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
-    public async IAsyncEnumerable<BatchGetResult> BatchGetAsync(IReadOnlyList<string> resourceNames, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<BatchGetResult> BatchGetAsync(IReadOnlyList<string> resourceNames, IDocumentStore? storeOverride = null, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
+        var effectiveStore = storeOverride ?? store;
         foreach (var resourceName in resourceNames)
         {
             var path = DocumentPath.Parse(resourceName);
             var readTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
-            var document = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+            var document = await effectiveStore.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
             yield return document is not null
                 ? new BatchGetFoundResult(document, readTime)
@@ -174,10 +175,11 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         return new ListCollectionIdsResult(collectionIds, nextPageToken);
     }
 
-    public async Task<IReadOnlyList<Document>> RunQueryAsync(string parent, StructuredQuery query, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<Document>> RunQueryAsync(string parent, StructuredQuery query, IDocumentStore? storeOverride = null, CancellationToken cancellationToken = default)
     {
+        var effectiveStore = storeOverride ?? store;
         var candidates = new List<Document>();
-        await foreach (var document in store.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in effectiveStore.ListAsync(parent, cancellationToken).ConfigureAwait(false))
         {
             candidates.Add(document);
         }
@@ -185,7 +187,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         return QueryEngine.Execute(parent, query, candidates);
     }
 
-    public async Task<AggregationQueryResult> RunAggregationQueryAsync(string parent, StructuredAggregationQuery aggregationQuery, CancellationToken cancellationToken = default)
+    public async Task<AggregationQueryResult> RunAggregationQueryAsync(string parent, StructuredAggregationQuery aggregationQuery, IDocumentStore? storeOverride = null, CancellationToken cancellationToken = default)
     {
         const int minAggregations = 1;
         const int maxAggregations = 5;
@@ -200,8 +202,9 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
             ? aggregationQuery.StructuredQuery
             : new StructuredQuery();
 
+        var effectiveStore = storeOverride ?? store;
         var candidates = new List<Document>();
-        await foreach (var document in store.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in effectiveStore.ListAsync(parent, cancellationToken).ConfigureAwait(false))
         {
             candidates.Add(document);
         }
@@ -398,6 +401,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
     public async Task<IReadOnlyList<WriteResult>> CommitAsync(
         IReadOnlyList<Write> writes,
         IReadOnlyDictionary<string, Timestamp?>? transactionReadSet,
+        IDocumentStore? storeOverride = null,
         CancellationToken cancellationToken = default)
     {
         const int maxWritesPerTransaction = 500;
@@ -410,19 +414,22 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         await _commitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            // 1. Validate transaction read-set (if transactional)
+            // 1. Validate transaction read-set against the base store (if transactional)
             if (transactionReadSet is not null)
             {
                 await ValidateReadSetAsync(transactionReadSet, cancellationToken).ConfigureAwait(false);
             }
 
-            // 2. Prepare phase: validate all preconditions and build mutations (no store writes)
+            // 2. Prepare phase: validate all preconditions and build mutations (no store writes).
+            //    Uses the overlay store when present so intra-transaction writes are visible
+            //    to later reads within the same transaction.
+            var prepareStore = storeOverride ?? store;
             var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
             var mutations = new List<PreparedMutation>(writes.Count);
 
             foreach (var write in writes)
             {
-                var mutation = await PrepareWriteAsync(write, now, cancellationToken).ConfigureAwait(false);
+                var mutation = await PrepareWriteAsync(write, now, prepareStore, cancellationToken).ConfigureAwait(false);
                 mutations.Add(mutation);
             }
 
@@ -479,14 +486,14 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         }
     }
 
-    private async Task<PreparedMutation> PrepareWriteAsync(Write write, Timestamp now, CancellationToken cancellationToken)
+    private static async Task<PreparedMutation> PrepareWriteAsync(Write write, Timestamp now, IDocumentStore prepareStore, CancellationToken cancellationToken)
     {
         switch (write.OperationCase)
         {
             case Write.OperationOneofCase.Update:
                 {
                     var path = DocumentPath.Parse(write.Update.Name);
-                    var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+                    var existing = await prepareStore.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
                     CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
 
@@ -550,7 +557,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
             case Write.OperationOneofCase.Delete:
                 {
                     var path = DocumentPath.Parse(write.Delete);
-                    var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
+                    var existing = await prepareStore.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
                     CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
 
