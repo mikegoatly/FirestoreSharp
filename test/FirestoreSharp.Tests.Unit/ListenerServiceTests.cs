@@ -3,6 +3,8 @@ using FirestoreSharp.Core.Listeners;
 using FirestoreSharp.Core.Stores.InMemory;
 using FirestoreSharp.Tests.Unit.Builders;
 
+using Microsoft.Extensions.Logging.Abstractions;
+
 using Google.Cloud.Firestore.V1;
 
 using Xunit;
@@ -20,7 +22,7 @@ public sealed class ListenerServiceTests : IAsyncDisposable
     public ListenerServiceTests()
     {
         _listenerService = new ListenerService(_store);
-        _documentService = new DocumentService(_store, _listenerService);
+        _documentService = new DocumentService(_store, _listenerService, NullLogger<DocumentService>.Instance);
     }
 
     public async ValueTask DisposeAsync()

@@ -6,15 +6,39 @@ using Google.Protobuf.WellKnownTypes;
 
 using Grpc.Core;
 
+using Microsoft.Extensions.Logging;
+
 namespace FirestoreSharp.Core;
 
-internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotifier changeNotifier) : IDocumentService, IDisposable
+internal sealed partial class DocumentService(IDocumentStore store, IDocumentChangeNotifier changeNotifier, ILogger<DocumentService> logger) : IDocumentService, IDisposable
 {
     private readonly SemaphoreSlim _commitLock = new(1, 1);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Create {Path}")]
+    private partial void LogCreate(string path);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Get {Path}")]
+    private partial void LogGet(string path);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Update {Path}")]
+    private partial void LogUpdate(string path);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Delete {Path}")]
+    private partial void LogDelete(string path);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Query {Parent} ({DocumentCount} results)")]
+    private partial void LogQuery(string parent, int documentCount);
+
+    [LoggerMessage(Level = LogLevel.Debug, Message = "Commit {WriteCount} write(s)")]
+    private partial void LogCommit(int writeCount);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Commit aborted — transaction conflict on {ResourceName}")]
+    private partial void LogCommitConflict(string resourceName);
 
     public void Dispose() => _commitLock.Dispose();
     public async Task<Document> CreateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default)
     {
+        LogCreate(path.ResourceName);
         var now = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
 
         var created = document.Clone();
@@ -31,6 +55,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
 
     public async Task<Document> GetAsync(DocumentPath path, IDocumentStore? storeOverride = null, CancellationToken cancellationToken = default)
     {
+        LogGet(path.ResourceName);
         return await (storeOverride ?? store).GetAsync(path, cancellationToken).ConfigureAwait(false);
     }
 
@@ -82,6 +107,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
 
     public async Task<Document> UpdateAsync(DocumentPath path, Document document, IReadOnlyList<string>? updateMaskFieldPaths, CancellationToken cancellationToken = default)
     {
+        LogUpdate(path.ResourceName);
         var existing = await store.GetAsync(path, cancellationToken).ConfigureAwait(false);
 
         var updated = existing.Clone();
@@ -119,6 +145,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
 
     public async Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default)
     {
+        LogDelete(path.ResourceName);
         await store.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
 
         changeNotifier.NotifyDocumentsChanged([new DocumentMutation(path.ResourceName, null)]);
@@ -184,7 +211,9 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
             candidates.Add(document);
         }
 
-        return QueryEngine.Execute(parent, query, candidates);
+        var documents = QueryEngine.Execute(parent, query, candidates);
+        LogQuery(parent, documents.Count);
+        return documents;
     }
 
     public async Task<AggregationQueryResult> RunAggregationQueryAsync(string parent, StructuredAggregationQuery aggregationQuery, IDocumentStore? storeOverride = null, CancellationToken cancellationToken = default)
@@ -210,6 +239,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
         }
 
         var documents = QueryEngine.Execute(parent, innerQuery, candidates);
+        LogQuery(parent, documents.Count);
         var aggregationResult = AggregationEngine.Execute(aggregationQuery, documents);
         return new AggregationQueryResult(aggregationResult, documents);
     }
@@ -411,6 +441,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
                 $"A transaction cannot contain more than {maxWritesPerTransaction} writes."));
         }
 
+        LogCommit(writes.Count);
         await _commitLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -480,13 +511,14 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
 
             if (conflict)
             {
+                LogCommitConflict(resourceName);
                 throw new RpcException(new Status(StatusCode.Aborted,
                     $"Transaction conflict: document '{resourceName}' was modified by another operation."));
             }
         }
     }
 
-    private static async Task<PreparedMutation> PrepareWriteAsync(Write write, Timestamp now, IDocumentStore prepareStore, CancellationToken cancellationToken)
+    private async Task<PreparedMutation> PrepareWriteAsync(Write write, Timestamp now, IDocumentStore prepareStore, CancellationToken cancellationToken)
     {
         switch (write.OperationCase)
         {
@@ -521,6 +553,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
                             }
                         }
 
+                        LogCreate(path.ResourceName);
                         return new PreparedMutation(MutationType.Create, path, updated, new WriteResult { UpdateTime = now });
                     }
                     else
@@ -550,6 +583,7 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
                             updated.Fields.Add(write.Update.Fields);
                         }
 
+                        LogUpdate(path.ResourceName);
                         return new PreparedMutation(MutationType.Update, path, updated, new WriteResult { UpdateTime = now });
                     }
                 }
@@ -561,9 +595,13 @@ internal sealed class DocumentService(IDocumentStore store, IDocumentChangeNotif
 
                     CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
 
-                    return existing is not null
-                        ? new PreparedMutation(MutationType.Delete, path, null, new WriteResult())
-                        : new PreparedMutation(MutationType.None, path, null, new WriteResult());
+                    if (existing is not null)
+                    {
+                        LogDelete(path.ResourceName);
+                        return new PreparedMutation(MutationType.Delete, path, null, new WriteResult());
+                    }
+
+                    return new PreparedMutation(MutationType.None, path, null, new WriteResult());
                 }
 
             case Write.OperationOneofCase.Transform:
