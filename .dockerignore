@@ -1,0 +1,14 @@
+**/.vs
+**/.idea
+**/bin
+**/obj
+**/TestResults
+test/
+demo/
+docs/
+*.slnx
+*.slnLaunch.user
+*.md
+.github/
+.husky/
+dotnet-tools.json

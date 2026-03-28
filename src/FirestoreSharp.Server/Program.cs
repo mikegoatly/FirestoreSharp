@@ -5,7 +5,9 @@ using FirestoreSharp.Core.Stores.InMemory;
 using FirestoreSharp.Core.Transactions;
 using FirestoreSharp.Server.Services;
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateSlimBuilder(args);
+
+builder.WebHost.UseKestrelHttpsConfiguration();
 
 builder.Services.AddGrpc();
 builder.Services.AddSingleton<IDocumentService, DocumentService>();

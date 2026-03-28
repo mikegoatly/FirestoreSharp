@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 
 using Avalonia.Threading;
 
@@ -42,7 +43,9 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         try
         {
             StatusText = "Loading todos…";
+            var stopwatch = Stopwatch.StartNew();
             var items = await _firestore.GetAllAsync().ConfigureAwait(false);
+            var elapsed = stopwatch.ElapsedMilliseconds;
 
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -50,7 +53,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
                 {
                     Items.Add(new TodoItemViewModel(item));
                 }
-                StatusText = $"Loaded {items.Count} todo(s). Listener active.";
+                StatusText = $"Loaded {items.Count} todo(s) in {elapsed}ms. Listener active.";
             });
 
             StartListener();
