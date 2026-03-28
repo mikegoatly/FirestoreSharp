@@ -1,28 +1,14 @@
 using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
+
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace FirestoreSharp.Tests.Unit;
 
-public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServiceCrudTests(WebApplicationFactory<Program> factory) : FirestoreServiceTestBase(factory)
 {
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public FirestoreServiceCrudTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     [Fact]
     public async Task CreateDocument_ReturnsDocumentWithNameAndTimestamps()
@@ -32,7 +18,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("user1")
             .WithField("displayName", "Alice");
 
-        var response = await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(builder.ExpectedName, response.Name);
         Assert.NotNull(response.CreateTime);
@@ -48,9 +34,9 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("user-get-test")
             .WithField("email", "bob@example.com");
 
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(builder.ExpectedName, response.Name);
         Assert.Equal("bob@example.com", response.Fields["email"].StringValue);
@@ -64,7 +50,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("nonexistent");
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
@@ -77,10 +63,10 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("user-dup-test")
             .WithField("name", "Charlie");
 
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.AlreadyExists, ex.StatusCode);
     }
@@ -94,14 +80,14 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithField("name", "Alice")
             .WithField("email", "alice@example.com");
 
-        var created = await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var created = await Client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var updateBuilder = new DocumentBuilder()
             .WithCollection("users")
             .WithId("user-update-all")
             .WithField("name", "Bob");
 
-        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(createBuilder.ExpectedName, response.Name);
         Assert.Equal("Bob", response.Fields["name"].StringValue);
@@ -119,14 +105,14 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithField("name", "Alice")
             .WithField("email", "alice@example.com");
 
-        await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var updateBuilder = new DocumentBuilder()
             .WithCollection("users")
             .WithId("user-update-mask")
             .WithField("email", "newemail@example.com");
 
-        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("email"), cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("email"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Alice", response.Fields["name"].StringValue);
         Assert.Equal("newemail@example.com", response.Fields["email"].StringValue);
@@ -141,7 +127,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithField("name", "Alice")
             .WithField("email", "alice@example.com");
 
-        await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Update mask references "email" but the document doesn't include it → should be removed
         var updateBuilder = new DocumentBuilder()
@@ -149,7 +135,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("user-update-remove")
             .WithField("name", "Alice");
 
-        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("email"), cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("email"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Alice", response.Fields["name"].StringValue);
         Assert.False(response.Fields.ContainsKey("email"));
@@ -163,7 +149,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("nonexistent-update");
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.UpdateDocumentAsync(builder.BuildUpdateRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.UpdateDocumentAsync(builder.BuildUpdateRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
@@ -178,14 +164,14 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithField("address.city", "London")
             .WithField("address.zip", "SW1");
 
-        await _client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(createBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var updateBuilder = new DocumentBuilder()
             .WithCollection("users")
             .WithId("user-nested-mask")
             .WithField("address.city", "Paris");
 
-        var response = await _client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("address.city"), cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.UpdateDocumentAsync(updateBuilder.BuildUpdateRequest("address.city"), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal("Alice", response.Fields["name"].StringValue);
         Assert.Equal("Paris", response.Fields["address"].MapValue.Fields["city"].StringValue);
@@ -200,12 +186,12 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("user-delete-test")
             .WithField("name", "Alice");
 
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        await _client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
@@ -218,7 +204,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("nonexistent-delete");
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
@@ -231,7 +217,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("batch-found")
             .WithField("name", "Alice");
 
-        await _client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var missingName = "projects/test-project/databases/(default)/documents/users/batch-missing";
 
@@ -243,7 +229,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
         request.Documents.Add(missingName);
 
         var responses = new List<BatchGetDocumentsResponse>();
-        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
         await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
         {
             responses.Add(response);
@@ -273,8 +259,8 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("batch-all-2")
             .WithField("name", "Bob");
 
-        await _client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new BatchGetDocumentsRequest
         {
@@ -284,7 +270,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
         request.Documents.Add(builder2.ExpectedName);
 
         var responses = new List<BatchGetDocumentsResponse>();
-        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
         await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
         {
             responses.Add(response);
@@ -305,7 +291,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
         request.Documents.Add("projects/test-project/databases/(default)/documents/users/batch-miss-2");
 
         var responses = new List<BatchGetDocumentsResponse>();
-        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
         await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
         {
             responses.Add(response);
@@ -324,7 +310,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
         };
 
         var responses = new List<BatchGetDocumentsResponse>();
-        using var call = _client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.BatchGetDocuments(request, cancellationToken: TestContext.Current.CancellationToken);
         await foreach (var response in call.ResponseStream.ReadAllAsync(TestContext.Current.CancellationToken))
         {
             responses.Add(response);
@@ -345,10 +331,10 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("list-item-2")
             .WithField("name", "Second");
 
-        await _client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.ListDocumentsAsync(
+        var response = await Client.ListDocumentsAsync(
             new DocumentBuilder().WithCollection("items").BuildListRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -360,7 +346,7 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
     [Fact]
     public async Task ListDocuments_EmptyCollection_ReturnsEmpty()
     {
-        var response = await _client.ListDocumentsAsync(
+        var response = await Client.ListDocumentsAsync(
             new DocumentBuilder().WithCollection("empty-collection").BuildListRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -377,17 +363,17 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
                 .WithCollection("paged")
                 .WithId($"page-doc-{i:D2}")
                 .WithField("index", i);
-            await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+            await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var page1 = await _client.ListDocumentsAsync(
+        var page1 = await Client.ListDocumentsAsync(
             new DocumentBuilder().WithCollection("paged").BuildListRequest(pageSize: 2),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, page1.Documents.Count);
         Assert.NotEmpty(page1.NextPageToken);
 
-        var page2 = await _client.ListDocumentsAsync(
+        var page2 = await Client.ListDocumentsAsync(
             new DocumentBuilder().WithCollection("paged").BuildListRequest(pageSize: 2, pageToken: page1.NextPageToken),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -411,10 +397,10 @@ public sealed class FirestoreServiceCrudTests : IClassFixture<WebApplicationFact
             .WithId("other-doc")
             .WithField("val", "no");
 
-        await _client.CreateDocumentAsync(inScope.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(outOfScope.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(inScope.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(outOfScope.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.ListDocumentsAsync(
+        var response = await Client.ListDocumentsAsync(
             new DocumentBuilder().WithCollection("scoped").BuildListRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 

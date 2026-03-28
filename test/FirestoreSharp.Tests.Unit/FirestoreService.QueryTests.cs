@@ -1,30 +1,16 @@
 using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 using Value = Google.Cloud.Firestore.V1.Value;
 
+using Microsoft.AspNetCore.Mvc.Testing;
+
 namespace FirestoreSharp.Tests.Unit;
 
-public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServiceQueryTests(WebApplicationFactory<Program> factory) : FirestoreServiceTestBase(factory)
 {
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public FirestoreServiceQueryTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     private static async Task<List<RunQueryResponse>> RunQueryAsync(
         Firestore.FirestoreClient client,
@@ -46,11 +32,11 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var alice = new DocumentBuilder().WithCollection("rq-nofilter").WithId("alice").WithField("name", "Alice");
         var bob = new DocumentBuilder().WithCollection("rq-nofilter").WithId("bob").WithField("name", "Bob");
 
-        await _client.CreateDocumentAsync(alice.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(bob.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(alice.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(bob.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new DocumentBuilder().WithCollection("rq-nofilter").BuildRunQueryRequest();
-        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunQueryAsync(Client, request, TestContext.Current.CancellationToken);
 
         // Final done=true response is included; filter it out to count real documents
         var docResponses = responses.Where(r => r.Document is not null).ToList();
@@ -66,9 +52,9 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var active2 = new DocumentBuilder().WithCollection("rq-status").WithId("active-2").WithField("status", "active");
         var inactive = new DocumentBuilder().WithCollection("rq-status").WithId("inactive-1").WithField("status", "inactive");
 
-        await _client.CreateDocumentAsync(active1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(active2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(inactive.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(active1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(active2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(inactive.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new DocumentBuilder().WithCollection("rq-status").BuildRunQueryRequest(query =>
         {
@@ -83,7 +69,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunQueryAsync(Client, request, TestContext.Current.CancellationToken);
         var docs = responses.Where(r => r.Document is not null).ToList();
 
         Assert.Equal(2, docs.Count);
@@ -97,9 +83,9 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var u2 = new DocumentBuilder().WithCollection("rq-ineq").WithId("u2").WithField("score", 20L);
         var u3 = new DocumentBuilder().WithCollection("rq-ineq").WithId("u3").WithField("score", 30L);
 
-        await _client.CreateDocumentAsync(u1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(u2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(u3.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(u1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(u2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(u3.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new DocumentBuilder().WithCollection("rq-ineq").BuildRunQueryRequest(query =>
         {
@@ -114,7 +100,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunQueryAsync(Client, request, TestContext.Current.CancellationToken);
         var docs = responses.Where(r => r.Document is not null).ToList();
 
         Assert.Equal(2, docs.Count);
@@ -128,9 +114,9 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var u1 = new DocumentBuilder().WithCollection("rq-order").WithId("u1").WithField("rank", 1L);
         var u2 = new DocumentBuilder().WithCollection("rq-order").WithId("u2").WithField("rank", 2L);
 
-        await _client.CreateDocumentAsync(u3.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(u1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(u2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(u3.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(u1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(u2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new DocumentBuilder().WithCollection("rq-order").BuildRunQueryRequest(query =>
         {
@@ -141,7 +127,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             });
         });
 
-        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunQueryAsync(Client, request, TestContext.Current.CancellationToken);
         var docs = responses.Where(r => r.Document is not null).ToList();
 
         Assert.Equal(3, docs.Count);
@@ -156,7 +142,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         for (var i = 1; i <= 5; i++)
         {
             var doc = new DocumentBuilder().WithCollection("rq-limit").WithId($"d{i:D2}").WithField("n", (long)i);
-            await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+            await Client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
         }
 
         var request = new DocumentBuilder().WithCollection("rq-limit").BuildRunQueryRequest(query =>
@@ -169,7 +155,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             query.Limit = 3;
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).ToList();
 
         Assert.Equal(3, docs.Count);
@@ -182,7 +168,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         for (var i = 1; i <= 5; i++)
         {
             var doc = new DocumentBuilder().WithCollection("rq-page").WithId($"p{i:D2}").WithField("n", (long)i);
-            await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+            await Client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
         }
 
         var request = new DocumentBuilder().WithCollection("rq-page").BuildRunQueryRequest(query =>
@@ -196,7 +182,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             query.Limit = 2;
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).ToList();
 
         Assert.Equal(2, docs.Count);
@@ -213,7 +199,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             .WithField("email", "alice@example.com")
             .WithField("age", 30L);
 
-        await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new DocumentBuilder().WithCollection("rq-select").BuildRunQueryRequest(query =>
         {
@@ -222,7 +208,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             query.Select.Fields.Add(new StructuredQuery.Types.FieldReference { FieldPath = "email" });
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).ToList();
 
         var result = Assert.Single(docs).Document;
@@ -247,7 +233,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunQueryAsync(Client, request, TestContext.Current.CancellationToken);
 
         Assert.Single(responses); // Only the done=true message
         Assert.True(responses[0].Done);
@@ -261,9 +247,9 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var noMatch1 = new DocumentBuilder().WithCollection("rq-and").WithId("no-active").WithField("active", false).WithField("score", 50L);
         var noMatch2 = new DocumentBuilder().WithCollection("rq-and").WithId("no-score").WithField("active", true).WithField("score", 5L);
 
-        await _client.CreateDocumentAsync(match.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(noMatch1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(noMatch2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(match.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(noMatch1.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(noMatch2.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new DocumentBuilder().WithCollection("rq-and").BuildRunQueryRequest(query =>
         {
@@ -292,7 +278,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             query.Where = new StructuredQuery.Types.Filter { CompositeFilter = composite };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).ToList();
 
         Assert.Single(docs);
@@ -311,7 +297,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             .WithId("m1")
             .WithField("role", "admin");
 
-        await _client.CreateDocumentAsync(member.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(member.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new RunQueryRequest
         {
@@ -324,7 +310,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             AllDescendants = true
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).ToList();
 
         Assert.Single(docs);
@@ -335,10 +321,10 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
     public async Task RunQuery_AllDocuments_SendsReadTimeOnEachResult()
     {
         var doc = new DocumentBuilder().WithCollection("rq-readtime").WithId("rt1").WithField("x", "y");
-        await _client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(doc.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = new DocumentBuilder().WithCollection("rq-readtime").BuildRunQueryRequest();
-        var responses = await RunQueryAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunQueryAsync(Client, request, TestContext.Current.CancellationToken);
 
         Assert.All(responses, r => Assert.NotNull(r.ReadTime));
     }
@@ -351,7 +337,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var col = "rq-cursor-start-at";
         for (var i = 1; i <= 5; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"d{i:D2}").WithField("n", (long)i).BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -371,7 +357,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         Assert.Equal(3, docs.Count);
@@ -386,7 +372,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var col = "rq-cursor-start-after";
         for (var i = 1; i <= 5; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"d{i:D2}").WithField("n", (long)i).BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -406,7 +392,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         Assert.Equal(2, docs.Count);
@@ -420,7 +406,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var col = "rq-cursor-end-at";
         for (var i = 1; i <= 5; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"d{i:D2}").WithField("n", (long)i).BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -440,7 +426,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         Assert.Equal(3, docs.Count);
@@ -455,7 +441,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var col = "rq-cursor-end-before";
         for (var i = 1; i <= 5; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"d{i:D2}").WithField("n", (long)i).BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -475,7 +461,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         Assert.Equal(2, docs.Count);
@@ -489,7 +475,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var col = "rq-cursor-window";
         for (var i = 1; i <= 7; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"d{i:D2}").WithField("n", (long)i).BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -506,7 +492,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             query.EndAt = new Cursor { Before = false, Values = { new Value { IntegerValue = 5 } } };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         Assert.Equal(4, docs.Count);
@@ -520,7 +506,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         var col = "rq-cursor-desc";
         for (var i = 1; i <= 5; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"d{i:D2}").WithField("n", (long)i).BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -536,7 +522,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             query.StartAt = new Cursor { Before = true, Values = { new Value { IntegerValue = 4 } } };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         Assert.Equal(4, docs.Count);
@@ -548,10 +534,10 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
     public async Task RunQuery_CursorPrefixValues_MatchesOnPartialKey()
     {
         var col = "rq-cursor-prefix";
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("b").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("c").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("d").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("b").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("c").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("d").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // ORDER BY score ASC, __name__ ASC. Cursor prefix: score=10 (before=false, START AFTER).
         // With only score=10 in cursor and before=false, this starts after ALL docs with score=10.
@@ -566,7 +552,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             query.StartAt = new Cursor { Before = false, Values = { new Value { IntegerValue = 10 } } };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         // score=10 docs are all equal to cursor on the compared prefix field, cmp=0 → excluded (before=false)
@@ -582,7 +568,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
         // doc IDs are alphabetical: a, b, c, d, e
         foreach (var id in new[] { "a", "b", "c", "d", "e" })
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId(id).WithField("v", id).BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -604,7 +590,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         Assert.Equal(2, docs.Count);
@@ -617,13 +603,13 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
     {
         var col = "rq-cursor-missing-field";
         // doc1 has no "score" field, doc2 has score=10, doc3 has score=20
-        await _client.CreateDocumentAsync(
+        await Client.CreateDocumentAsync(
             new DocumentBuilder().WithCollection(col).WithId("doc1").WithField("v", "no-score").BuildCreateRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(
+        await Client.CreateDocumentAsync(
             new DocumentBuilder().WithCollection(col).WithId("doc2").WithField("score", 10L).BuildCreateRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(
+        await Client.CreateDocumentAsync(
             new DocumentBuilder().WithCollection(col).WithId("doc3").WithField("score", 20L).BuildCreateRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -643,7 +629,7 @@ public sealed class FirestoreServiceQueryTests : IClassFixture<WebApplicationFac
             };
         });
 
-        var docs = (await RunQueryAsync(_client, request, TestContext.Current.CancellationToken))
+        var docs = (await RunQueryAsync(Client, request, TestContext.Current.CancellationToken))
             .Where(r => r.Document is not null).Select(r => r.Document).ToList();
 
         // doc1 (missing field = null) is excluded; doc2 and doc3 remain

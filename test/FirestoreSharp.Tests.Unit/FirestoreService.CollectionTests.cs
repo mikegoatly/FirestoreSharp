@@ -1,27 +1,13 @@
 using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
+
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace FirestoreSharp.Tests.Unit;
 
-public sealed class FirestoreServiceCollectionTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServiceCollectionTests(WebApplicationFactory<Program> factory) : FirestoreServiceTestBase(factory)
 {
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public FirestoreServiceCollectionTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     [Fact]
     public async Task ListCollectionIds_ReturnsTopLevelCollections()
@@ -32,10 +18,10 @@ public sealed class FirestoreServiceCollectionTests : IClassFixture<WebApplicati
 
         var builderA = new DocumentBuilder().WithCollection(colA).WithId("doc1");
         var builderB = new DocumentBuilder().WithCollection(colB).WithId("doc1");
-        await _client.CreateDocumentAsync(builderA.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builderB.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builderA.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builderB.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.ListCollectionIdsAsync(
+        var response = await Client.ListCollectionIdsAsync(
             builderA.BuildListCollectionIdsRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -50,11 +36,11 @@ public sealed class FirestoreServiceCollectionTests : IClassFixture<WebApplicati
         var col = $"lcids-dedup-{suffix}";
 
         // Multiple docs in the same collection — should appear only once
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("doc1").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("doc2").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("doc3").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("doc1").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("doc2").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithCollection(col).WithId("doc3").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.ListCollectionIdsAsync(
+        var response = await Client.ListCollectionIdsAsync(
             new DocumentBuilder().BuildListCollectionIdsRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -72,14 +58,14 @@ public sealed class FirestoreServiceCollectionTests : IClassFixture<WebApplicati
 
         // Create parent doc
         var parentBuilder = new DocumentBuilder().WithCollection(parentCol).WithId(parentDoc);
-        await _client.CreateDocumentAsync(parentBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(parentBuilder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Create subcollection docs under the parent document
         var subParent = parentBuilder.ExpectedName;
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithParent(subParent).WithCollection(subcolA).WithId("doc1").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(new DocumentBuilder().WithParent(subParent).WithCollection(subcolB).WithId("doc1").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithParent(subParent).WithCollection(subcolA).WithId("doc1").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(new DocumentBuilder().WithParent(subParent).WithCollection(subcolB).WithId("doc1").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.ListCollectionIdsAsync(
+        var response = await Client.ListCollectionIdsAsync(
             parentBuilder.BuildListCollectionIdsRequest(parent: subParent),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -97,9 +83,9 @@ public sealed class FirestoreServiceCollectionTests : IClassFixture<WebApplicati
         var docId = $"lone-doc-{suffix}";
 
         var builder = new DocumentBuilder().WithCollection(col).WithId(docId);
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.ListCollectionIdsAsync(
+        var response = await Client.ListCollectionIdsAsync(
             builder.BuildListCollectionIdsRequest(parent: builder.ExpectedName),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -113,12 +99,12 @@ public sealed class FirestoreServiceCollectionTests : IClassFixture<WebApplicati
         var suffix = Guid.NewGuid().ToString("N")[..8];
         for (var i = 1; i <= 3; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection($"lcids-{i:D2}-{suffix}").WithId("doc1").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var page1 = await _client.ListCollectionIdsAsync(
+        var page1 = await Client.ListCollectionIdsAsync(
             new DocumentBuilder().BuildListCollectionIdsRequest(pageSize: 2),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -126,7 +112,7 @@ public sealed class FirestoreServiceCollectionTests : IClassFixture<WebApplicati
         Assert.Collection(page1.CollectionIds.OrderBy(i => i), id => Assert.StartsWith("lcids-01", id), id => Assert.StartsWith("lcids-02", id));
         Assert.NotEmpty(page1.NextPageToken);
 
-        var page2 = await _client.ListCollectionIdsAsync(
+        var page2 = await Client.ListCollectionIdsAsync(
             new DocumentBuilder().BuildListCollectionIdsRequest(pageSize: 2, pageToken: page1.NextPageToken),
             cancellationToken: TestContext.Current.CancellationToken);
 

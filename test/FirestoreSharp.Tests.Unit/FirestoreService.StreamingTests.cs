@@ -1,34 +1,20 @@
 using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
+
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace FirestoreSharp.Tests.Unit;
 
-public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServiceStreamingTests(WebApplicationFactory<Program> factory) : FirestoreServiceTestBase(factory)
 {
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public FirestoreServiceStreamingTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     [Fact]
     public async Task Write_Handshake_ReceivesStreamIdAndToken()
     {
         var builder = new DocumentBuilder();
-        using var call = _client.Write(cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.Write(cancellationToken: TestContext.Current.CancellationToken);
 
         await call.RequestStream.WriteAsync(builder.BuildWriteHandshake(), TestContext.Current.CancellationToken);
         await call.RequestStream.CompleteAsync();
@@ -46,7 +32,7 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
     public async Task Write_SingleBatch_CommitsAndResponds()
     {
         var builder = new DocumentBuilder().WithCollection("ws-tests").WithId("ws-single-1").WithField("v", "hello");
-        using var call = _client.Write(cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.Write(cancellationToken: TestContext.Current.CancellationToken);
 
         // Handshake
         await call.RequestStream.WriteAsync(builder.BuildWriteHandshake(), TestContext.Current.CancellationToken);
@@ -70,7 +56,7 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
         await call.RequestStream.CompleteAsync();
 
         // Document should now exist
-        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var doc = await Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("hello", doc.Fields["v"].StringValue);
     }
 
@@ -78,7 +64,7 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
     public async Task Write_MultipleBatches_EachCommittedInOrder()
     {
         var builder = new DocumentBuilder().WithCollection("ws-tests");
-        using var call = _client.Write(cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.Write(cancellationToken: TestContext.Current.CancellationToken);
 
         // Handshake
         await call.RequestStream.WriteAsync(builder.BuildWriteHandshake(), TestContext.Current.CancellationToken);
@@ -105,8 +91,8 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
         await call.RequestStream.CompleteAsync();
 
         // Both documents must exist
-        var result1 = await _client.GetDocumentAsync(doc1.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        var result2 = await _client.GetDocumentAsync(doc2.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var result1 = await Client.GetDocumentAsync(doc1.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var result2 = await Client.GetDocumentAsync(doc2.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("batch1", result1.Fields["v"].StringValue);
         Assert.Equal("batch2", result2.Fields["v"].StringValue);
     }
@@ -115,7 +101,7 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
     public async Task Write_EmptyWritesAfterHandshake_HeartbeatResponse()
     {
         var builder = new DocumentBuilder();
-        using var call = _client.Write(cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.Write(cancellationToken: TestContext.Current.CancellationToken);
 
         // Handshake
         await call.RequestStream.WriteAsync(builder.BuildWriteHandshake(), TestContext.Current.CancellationToken);
@@ -139,7 +125,7 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
     public async Task Write_StreamResumption_ThrowsUnimplemented()
     {
         var builder = new DocumentBuilder();
-        using var call = _client.Write(cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.Write(cancellationToken: TestContext.Current.CancellationToken);
 
         // Try to resume a stream by sending a stream_id on first message
         await call.RequestStream.WriteAsync(
@@ -157,7 +143,7 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
     public async Task Write_WritesInFirstMessage_ThrowsInvalidArgument()
     {
         var docBuilder = new DocumentBuilder().WithCollection("ws-tests").WithId("ws-invalid-first").WithField("v", "x");
-        using var call = _client.Write(cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.Write(cancellationToken: TestContext.Current.CancellationToken);
 
         var badFirst = new WriteRequest { Database = docBuilder.Database };
         badFirst.Writes.Add(docBuilder.BuildUpsertWrite());
@@ -174,7 +160,7 @@ public sealed class FirestoreServiceStreamingTests : IClassFixture<WebApplicatio
     public async Task Write_StreamTokenChangesEveryResponse()
     {
         var builder = new DocumentBuilder();
-        using var call = _client.Write(cancellationToken: TestContext.Current.CancellationToken);
+        using var call = Client.Write(cancellationToken: TestContext.Current.CancellationToken);
 
         await call.RequestStream.WriteAsync(builder.BuildWriteHandshake(), TestContext.Current.CancellationToken);
         Assert.True(await call.ResponseStream.MoveNext(TestContext.Current.CancellationToken));

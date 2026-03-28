@@ -1,28 +1,14 @@
 using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
+
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace FirestoreSharp.Tests.Unit;
 
-public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServicePartitionQueryTests(WebApplicationFactory<Program> factory) : FirestoreServiceTestBase(factory)
 {
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public FirestoreServicePartitionQueryTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     [Fact]
     public async Task PartitionQuery_ReturnsNMinusOneCursors()
@@ -32,13 +18,13 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
 
         for (var i = 1; i <= 10; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"doc-{i:D2}").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
 
         // partition_count = 3 → expect 3 split-point cursors (dividing into 4 sub-ranges)
-        var response = await _client.PartitionQueryAsync(
+        var response = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 3),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -54,12 +40,12 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
 
         for (var i = 1; i <= 6; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"doc-{i:D2}").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var response = await _client.PartitionQueryAsync(
+        var response = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 2),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -80,12 +66,12 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
 
         for (var i = 1; i <= 9; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"doc-{i:D2}").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var response = await _client.PartitionQueryAsync(
+        var response = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 4),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -102,12 +88,12 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
 
         for (var i = 1; i <= 3; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"doc-{i:D2}").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
 
-        var response = await _client.PartitionQueryAsync(
+        var response = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 10),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -122,11 +108,11 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var col = $"pq-single-{suffix}";
 
-        await _client.CreateDocumentAsync(
+        await Client.CreateDocumentAsync(
             new DocumentBuilder().WithCollection(col).WithId("only-doc").BuildCreateRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.PartitionQueryAsync(
+        var response = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 5),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -142,27 +128,27 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
 
         for (var i = 1; i <= 10; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 new DocumentBuilder().WithCollection(col).WithId($"doc-{i:D2}").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
 
         // Request 6 cursors total, 2 per page → 3 pages
-        var page1 = await _client.PartitionQueryAsync(
+        var page1 = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 6, pageSize: 2),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, page1.Partitions.Count);
         Assert.NotEmpty(page1.NextPageToken);
 
-        var page2 = await _client.PartitionQueryAsync(
+        var page2 = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 6, pageSize: 2, pageToken: page1.NextPageToken),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, page2.Partitions.Count);
         Assert.NotEmpty(page2.NextPageToken);
 
-        var page3 = await _client.PartitionQueryAsync(
+        var page3 = await Client.PartitionQueryAsync(
             new DocumentBuilder().WithCollection(col).BuildPartitionQueryRequest(partitionCount: 6, pageSize: 2, pageToken: page2.NextPageToken),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -180,7 +166,7 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
     public async Task PartitionQuery_InvalidPartitionCount_ThrowsInvalidArgument()
     {
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.PartitionQueryAsync(
+            Client.PartitionQueryAsync(
                 new DocumentBuilder().WithCollection("any").BuildPartitionQueryRequest(partitionCount: 0),
                 cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
@@ -193,7 +179,7 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var col = $"pq-noncg-{suffix}";
 
-        await _client.CreateDocumentAsync(
+        await Client.CreateDocumentAsync(
             new DocumentBuilder().WithCollection(col).WithId("doc1").BuildCreateRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -211,7 +197,7 @@ public sealed class FirestoreServicePartitionQueryTests : IClassFixture<WebAppli
             PartitionCount = 3
         };
 
-        var response = await _client.PartitionQueryAsync(request, cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.PartitionQueryAsync(request, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Empty(response.Partitions);
     }
 }

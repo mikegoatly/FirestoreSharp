@@ -2,28 +2,14 @@ using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf;
 using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
+
+using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace FirestoreSharp.Tests.Unit;
 
-public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServiceTransactionTests(WebApplicationFactory<Program> factory) : FirestoreServiceTestBase(factory)
 {
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public FirestoreServiceTransactionTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     // ── Commit ────────────────────────────────────────────────────────────────
 
@@ -32,13 +18,13 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-create-1").WithField("x", "hello");
 
-        var response = await _client.CommitAsync(builder.BuildCommitRequest(builder.BuildUpsertWrite()), cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.CommitAsync(builder.BuildCommitRequest(builder.BuildUpsertWrite()), cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(response.WriteResults);
         Assert.NotNull(response.WriteResults[0].UpdateTime);
         Assert.NotNull(response.CommitTime);
 
-        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var doc = await Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("hello", doc.Fields["x"].StringValue);
     }
 
@@ -46,12 +32,12 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     public async Task Commit_UpsertWrite_OverwritesExistingDocument()
     {
         var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-overwrite-1").WithField("a", "original").WithField("b", "keep");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var overwrite = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-overwrite-1").WithField("a", "updated");
-        await _client.CommitAsync(overwrite.BuildCommitRequest(overwrite.BuildUpsertWrite()), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CommitAsync(overwrite.BuildCommitRequest(overwrite.BuildUpsertWrite()), cancellationToken: TestContext.Current.CancellationToken);
 
-        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var doc = await Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("updated", doc.Fields["a"].StringValue);
         Assert.False(doc.Fields.ContainsKey("b"), "upsert without mask should replace all fields");
     }
@@ -60,12 +46,12 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     public async Task Commit_MaskedUpdateWrite_MergesIntoExistingDocument()
     {
         var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-merge-1").WithField("a", "original").WithField("b", "keep");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var update = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-merge-1").WithField("a", "updated");
-        await _client.CommitAsync(update.BuildCommitRequest(update.BuildMaskedUpdateWrite("a")), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CommitAsync(update.BuildCommitRequest(update.BuildMaskedUpdateWrite("a")), cancellationToken: TestContext.Current.CancellationToken);
 
-        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var doc = await Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("updated", doc.Fields["a"].StringValue);
         Assert.Equal("keep", doc.Fields["b"].StringValue);
     }
@@ -74,12 +60,12 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     public async Task Commit_DeleteWrite_RemovesDocument()
     {
         var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-delete-1").WithField("x", "y");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
-        await _client.CommitAsync(builder.BuildCommitRequest(builder.BuildDeleteWrite()), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CommitAsync(builder.BuildCommitRequest(builder.BuildDeleteWrite()), cancellationToken: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
 
@@ -90,7 +76,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var write = new Write { Update = builder.Build(), CurrentDocument = new Precondition { Exists = true } };
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(builder.BuildCommitRequest(write), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.CommitAsync(builder.BuildCommitRequest(write), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
         Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
     }
 
@@ -98,12 +84,12 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     public async Task Commit_PreconditionExistsFalse_DocumentExists_ThrowsFailedPrecondition()
     {
         var builder = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-precond-2").WithField("x", "y");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var write = new Write { Update = builder.Build(), CurrentDocument = new Precondition { Exists = false } };
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(builder.BuildCommitRequest(write), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.CommitAsync(builder.BuildCommitRequest(write), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
         Assert.Equal(StatusCode.FailedPrecondition, ex.StatusCode);
     }
 
@@ -113,14 +99,14 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var doc1 = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-multi-1").WithField("v", "a");
         var doc2 = new DocumentBuilder().WithCollection("commit-tests").WithId("commit-multi-2").WithField("v", "b");
 
-        var response = await _client.CommitAsync(
+        var response = await Client.CommitAsync(
             doc1.BuildCommitRequest(doc1.BuildUpsertWrite(), doc2.BuildUpsertWrite()),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, response.WriteResults.Count);
 
-        var result1 = await _client.GetDocumentAsync(doc1.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        var result2 = await _client.GetDocumentAsync(doc2.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var result1 = await Client.GetDocumentAsync(doc1.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var result2 = await Client.GetDocumentAsync(doc2.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("a", result1.Fields["v"].StringValue);
         Assert.Equal("b", result2.Fields["v"].StringValue);
     }
@@ -133,7 +119,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var doc1 = new DocumentBuilder().WithCollection("bw-tests").WithId("bw-ok-1").WithField("v", "1");
         var doc2 = new DocumentBuilder().WithCollection("bw-tests").WithId("bw-ok-2").WithField("v", "2");
 
-        var response = await _client.BatchWriteAsync(
+        var response = await Client.BatchWriteAsync(
             doc1.BuildBatchWriteRequest(doc1.BuildUpsertWrite(), doc2.BuildUpsertWrite()),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -149,7 +135,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var failingWrite = new Write { Update = bad.Build(), CurrentDocument = new Precondition { Exists = true } };
 
         var request = good.BuildBatchWriteRequest(good.BuildUpsertWrite(), failingWrite);
-        var response = await _client.BatchWriteAsync(request, cancellationToken: TestContext.Current.CancellationToken);
+        var response = await Client.BatchWriteAsync(request, cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Equal(2, response.Status.Count);
         Assert.Equal((int)StatusCode.OK, response.Status[0].Code);
@@ -162,7 +148,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     public async Task BeginTransaction_ReadWrite_ReturnsTransactionId()
     {
         var builder = new DocumentBuilder();
-        var response = await _client.BeginTransactionAsync(
+        var response = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -175,7 +161,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         var builder = new DocumentBuilder();
         var options = new TransactionOptions { ReadOnly = new TransactionOptions.Types.ReadOnly() };
-        var response = await _client.BeginTransactionAsync(
+        var response = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(options),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -188,12 +174,12 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         var builder = new DocumentBuilder();
 
-        var first = await _client.BeginTransactionAsync(
+        var first = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Rollback the first transaction so it's completed
-        await _client.RollbackAsync(
+        await Client.RollbackAsync(
             builder.BuildRollbackRequest(first.Transaction),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -202,7 +188,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         {
             ReadWrite = new TransactionOptions.Types.ReadWrite { RetryTransaction = first.Transaction }
         };
-        var second = await _client.BeginTransactionAsync(
+        var second = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(retryOptions),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -215,12 +201,12 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     public async Task Rollback_ActiveTransaction_Succeeds()
     {
         var builder = new DocumentBuilder();
-        var txn = await _client.BeginTransactionAsync(
+        var txn = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Should not throw
-        await _client.RollbackAsync(
+        await Client.RollbackAsync(
             builder.BuildRollbackRequest(txn.Transaction),
             cancellationToken: TestContext.Current.CancellationToken);
     }
@@ -232,7 +218,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var fakeId = ByteString.CopyFromUtf8("nonexistent-txn-id");
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.RollbackAsync(
+            Client.RollbackAsync(
                 builder.BuildRollbackRequest(fakeId),
                 cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
@@ -244,18 +230,18 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         var builder = new DocumentBuilder().WithCollection("txn-tests").WithId("txn-commit-1").WithField("x", "hello");
 
-        var txn = await _client.BeginTransactionAsync(
+        var txn = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
-        var response = await _client.CommitAsync(
+        var response = await Client.CommitAsync(
             builder.BuildTransactionalCommitRequest(txn.Transaction, builder.BuildUpsertWrite()),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(response.WriteResults);
         Assert.NotNull(response.CommitTime);
 
-        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var doc = await Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("hello", doc.Fields["x"].StringValue);
     }
 
@@ -264,20 +250,20 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         // Setup: create a document
         var builder = new DocumentBuilder().WithCollection("txn-tests").WithId("txn-conflict-1").WithField("v", "original");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Step 1: Begin transaction and read the document (populates read-set)
-        var txn = await _client.BeginTransactionAsync(
+        var txn = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
-        await _client.GetDocumentAsync(
+        await Client.GetDocumentAsync(
             builder.BuildTransactionalGetRequest(txn.Transaction),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Step 2: Modify the document OUTSIDE the transaction
         var outsideUpdate = new DocumentBuilder().WithCollection("txn-tests").WithId("txn-conflict-1").WithField("v", "modified-outside");
-        await _client.CommitAsync(
+        await Client.CommitAsync(
             outsideUpdate.BuildCommitRequest(outsideUpdate.BuildUpsertWrite()),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -285,7 +271,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var write = new DocumentBuilder().WithCollection("txn-tests").WithId("txn-conflict-1").WithField("v", "txn-value");
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(
+            Client.CommitAsync(
                 write.BuildTransactionalCommitRequest(txn.Transaction, write.BuildUpsertWrite()),
                 cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
@@ -297,14 +283,14 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         // Setup: create a document
         var builder = new DocumentBuilder().WithCollection("txn-tests").WithId("txn-noconflict-1").WithField("v", "original");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Begin transaction and read
-        var txn = await _client.BeginTransactionAsync(
+        var txn = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
-        await _client.GetDocumentAsync(
+        await Client.GetDocumentAsync(
             builder.BuildTransactionalGetRequest(txn.Transaction),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -312,13 +298,13 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
 
         // Commit with write — should succeed
         var update = new DocumentBuilder().WithCollection("txn-tests").WithId("txn-noconflict-1").WithField("v", "updated-in-txn");
-        var response = await _client.CommitAsync(
+        var response = await Client.CommitAsync(
             update.BuildTransactionalCommitRequest(txn.Transaction, update.BuildUpsertWrite()),
             cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.Single(response.WriteResults);
 
-        var doc = await _client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var doc = await Client.GetDocumentAsync(builder.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal("updated-in-txn", doc.Fields["v"].StringValue);
     }
 
@@ -327,7 +313,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         // Create a document that will cause the SECOND write to fail via precondition
         var existing = new DocumentBuilder().WithCollection("txn-tests").WithId("atomic-existing").WithField("v", "exists");
-        await _client.CreateDocumentAsync(existing.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(existing.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // First write: create a new document
         var newDoc = new DocumentBuilder().WithCollection("txn-tests").WithId("atomic-new").WithField("v", "new");
@@ -337,7 +323,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var write2 = new Write { Update = existing.Build(), CurrentDocument = new Precondition { Exists = false } };
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(
+            Client.CommitAsync(
                 newDoc.BuildCommitRequest(write1, write2),
                 cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
@@ -345,7 +331,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
 
         // The first write should NOT have been applied (atomic rollback)
         var getEx = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.GetDocumentAsync(newDoc.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.GetDocumentAsync(newDoc.BuildGetRequest(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
         Assert.Equal(StatusCode.NotFound, getEx.StatusCode);
     }
 
@@ -355,12 +341,12 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var builder = new DocumentBuilder().WithCollection("txn-tests").WithId("readonly-write-1").WithField("x", "y");
 
         var options = new TransactionOptions { ReadOnly = new TransactionOptions.Types.ReadOnly() };
-        var txn = await _client.BeginTransactionAsync(
+        var txn = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(options),
             cancellationToken: TestContext.Current.CancellationToken);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(
+            Client.CommitAsync(
                 builder.BuildTransactionalCommitRequest(txn.Transaction, builder.BuildUpsertWrite()),
                 cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
@@ -371,20 +357,20 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     public async Task Commit_ReadOnlyTransaction_NoWrites_Succeeds()
     {
         var builder = new DocumentBuilder().WithCollection("txn-tests").WithId("readonly-nowrite-1").WithField("x", "y");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var options = new TransactionOptions { ReadOnly = new TransactionOptions.Types.ReadOnly() };
-        var txn = await _client.BeginTransactionAsync(
+        var txn = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(options),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Read within transaction
-        await _client.GetDocumentAsync(
+        await Client.GetDocumentAsync(
             builder.BuildTransactionalGetRequest(txn.Transaction),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Commit with no writes — should succeed
-        var response = await _client.CommitAsync(
+        var response = await Client.CommitAsync(
             builder.BuildTransactionalCommitRequest(txn.Transaction),
             cancellationToken: TestContext.Current.CancellationToken);
 
@@ -396,18 +382,18 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
     {
         var builder = new DocumentBuilder().WithCollection("txn-tests").WithId("double-commit-1").WithField("x", "y");
 
-        var txn = await _client.BeginTransactionAsync(
+        var txn = await Client.BeginTransactionAsync(
             builder.BuildBeginTransactionRequest(),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // First commit succeeds
-        await _client.CommitAsync(
+        await Client.CommitAsync(
             builder.BuildTransactionalCommitRequest(txn.Transaction, builder.BuildUpsertWrite()),
             cancellationToken: TestContext.Current.CancellationToken);
 
         // Second commit on same transaction should fail
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(
+            Client.CommitAsync(
                 builder.BuildTransactionalCommitRequest(txn.Transaction, builder.BuildUpsertWrite()),
                 cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
@@ -429,7 +415,7 @@ public sealed class FirestoreServiceTransactionTests : IClassFixture<WebApplicat
         var request = builder.BuildCommitRequest(writes);
 
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(request, cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.CommitAsync(request, cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
         Assert.Contains("A transaction cannot contain more than 500 writes.", ex.Status.Detail, StringComparison.Ordinal);

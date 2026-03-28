@@ -1,7 +1,5 @@
 using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
-using Grpc.Core;
-using Grpc.Net.Client;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -14,24 +12,10 @@ namespace FirestoreSharp.Tests.Unit;
 /// exercise the full stack: FirestoreGrpcService → ListenerService → ListenerConnection,
 /// with mutations triggered via other gRPC calls.
 /// </summary>
-public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServiceListenTests(WebApplicationFactory<Program> factory)
+    : FirestoreServiceTestBase(factory)
 {
     private const string Database = "projects/test-project/databases/(default)";
-
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public ListenGrpcTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     // ── Document target: initial snapshot ──────────────────────────────────
 
@@ -40,9 +24,9 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
     {
         var ct = TestContext.Current.CancellationToken;
         var builder = new DocumentBuilder().WithCollection("listen-init").WithId("existing-1").WithField("x", "a");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(BuildDocumentTarget(1, builder.ExpectedName)), ct);
 
         var add = await ReadNextAsync(call, ct);
@@ -67,7 +51,7 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
         var ct = TestContext.Current.CancellationToken;
         var resourceName = $"{Database}/documents/listen-init/missing-1";
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(BuildDocumentTarget(1, resourceName)), ct);
 
         var add = await ReadNextAsync(call, ct);
@@ -90,14 +74,12 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
         var ct = TestContext.Current.CancellationToken;
         var builder = new DocumentBuilder().WithCollection("listen-live").WithId("create-1").WithField("v", "hello");
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(BuildDocumentTarget(1, builder.ExpectedName)), ct);
-
-        // Drain initial snapshot: ADD + CURRENT + NO_CHANGE (doc doesn't exist yet)
-        await DrainAsync(call, 3, ct);
+        await DrainInitialSnapshotAsync(call, ct);
 
         // Create the document — triggers a notification
-        var createTask = _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
+        var createTask = Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
 
         var docChange = await ReadNextAsync(call, ct);
         Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
@@ -113,16 +95,14 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
     {
         var ct = TestContext.Current.CancellationToken;
         var builder = new DocumentBuilder().WithCollection("listen-live").WithId("update-1").WithField("v", "original");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(BuildDocumentTarget(1, builder.ExpectedName)), ct);
-
-        // Drain initial snapshot: ADD + DocumentChange + CURRENT + NO_CHANGE
-        await DrainAsync(call, 4, ct);
+        await DrainInitialSnapshotAsync(call, ct);
 
         var updated = new DocumentBuilder().WithCollection("listen-live").WithId("update-1").WithField("v", "updated");
-        var updateTask = _client.UpdateDocumentAsync(updated.BuildUpdateRequest(), cancellationToken: ct);
+        var updateTask = Client.UpdateDocumentAsync(updated.BuildUpdateRequest(), cancellationToken: ct);
 
         var docChange = await ReadNextAsync(call, ct);
         Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
@@ -137,13 +117,13 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
     {
         var ct = TestContext.Current.CancellationToken;
         var builder = new DocumentBuilder().WithCollection("listen-live").WithId("delete-1").WithField("v", "bye");
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: ct);
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(BuildDocumentTarget(1, builder.ExpectedName)), ct);
-        await DrainAsync(call, 4, ct);
+        await DrainInitialSnapshotAsync(call, ct);
 
-        var deleteTask = _client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: ct);
+        var deleteTask = Client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: ct);
 
         var docDelete = await ReadNextAsync(call, ct);
         Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentDelete, docDelete.ResponseTypeCase);
@@ -162,9 +142,9 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
         var ct = TestContext.Current.CancellationToken;
         var resourceName = $"{Database}/documents/listen-remove/doc-1";
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(BuildDocumentTarget(5, resourceName)), ct);
-        await DrainAsync(call, 3, ct); // ADD + CURRENT + NO_CHANGE
+        await DrainInitialSnapshotAsync(call, ct);
 
         await call.RequestStream.WriteAsync(RemoveTargetRequest(5), ct);
 
@@ -185,13 +165,13 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
 
         var match = new DocumentBuilder().WithCollection(collectionId).WithId("q-match-1").WithField("status", "active");
         var noMatch = new DocumentBuilder().WithCollection(collectionId).WithId("q-nomatch-1").WithField("status", "inactive");
-        await _client.CreateDocumentAsync(match.BuildCreateRequest(), cancellationToken: ct);
-        await _client.CreateDocumentAsync(noMatch.BuildCreateRequest(), cancellationToken: ct);
+        await Client.CreateDocumentAsync(match.BuildCreateRequest(), cancellationToken: ct);
+        await Client.CreateDocumentAsync(noMatch.BuildCreateRequest(), cancellationToken: ct);
 
         var target = BuildQueryTarget(1, $"{Database}/documents", collectionId,
             EqualFilter("status", "active"));
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(target), ct);
 
         var add = await ReadNextAsync(call, ct);
@@ -220,12 +200,12 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
         var target = BuildQueryTarget(1, $"{Database}/documents", collectionId,
             EqualFilter("region", "US"));
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(target), ct);
-        await DrainAsync(call, 3, ct); // ADD + CURRENT + NO_CHANGE (empty collection)
+        await DrainInitialSnapshotAsync(call, ct);
 
         var order = new DocumentBuilder().WithCollection(collectionId).WithId("order-us-1").WithField("region", "US");
-        var createTask = _client.CreateDocumentAsync(order.BuildCreateRequest(), cancellationToken: ct);
+        var createTask = Client.CreateDocumentAsync(order.BuildCreateRequest(), cancellationToken: ct);
 
         var docChange = await ReadNextAsync(call, ct);
         Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentChange, docChange.ResponseTypeCase);
@@ -241,17 +221,17 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
         var ct = TestContext.Current.CancellationToken;
         var collectionId = "listen-query-remove";
         var order = new DocumentBuilder().WithCollection(collectionId).WithId("order-eu-1").WithField("region", "US");
-        await _client.CreateDocumentAsync(order.BuildCreateRequest(), cancellationToken: ct);
+        await Client.CreateDocumentAsync(order.BuildCreateRequest(), cancellationToken: ct);
 
         var target = BuildQueryTarget(1, $"{Database}/documents", collectionId,
             EqualFilter("region", "US"));
 
-        using var call = _client.Listen(cancellationToken: ct);
+        using var call = Client.Listen(cancellationToken: ct);
         await call.RequestStream.WriteAsync(AddTargetRequest(target), ct);
-        await DrainAsync(call, 4, ct); // ADD + DocumentChange + CURRENT + NO_CHANGE
+        await DrainInitialSnapshotAsync(call, ct);
 
         var updated = new DocumentBuilder().WithCollection(collectionId).WithId("order-eu-1").WithField("region", "EU");
-        var updateTask = _client.UpdateDocumentAsync(updated.BuildUpdateRequest(), cancellationToken: ct);
+        var updateTask = Client.UpdateDocumentAsync(updated.BuildUpdateRequest(), cancellationToken: ct);
 
         var docRemove = await ReadNextAsync(call, ct);
         Assert.Equal(ListenResponse.ResponseTypeOneofCase.DocumentRemove, docRemove.ResponseTypeCase);
@@ -307,64 +287,4 @@ public sealed class ListenGrpcTests : IClassFixture<WebApplicationFactory<Progra
                 Value = new Value { StringValue = value },
             },
         };
-
-    private static async Task<ListenResponse> ReadNextAsync(
-        AsyncDuplexStreamingCall<ListenRequest, ListenResponse> call,
-        CancellationToken ct)
-    {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));
-        Assert.True(await call.ResponseStream.MoveNext(cts.Token));
-        return call.ResponseStream.Current;
-    }
-
-    private static async Task DrainAsync(
-        AsyncDuplexStreamingCall<ListenRequest, ListenResponse> call,
-        int count,
-        CancellationToken ct)
-    {
-        for (var i = 0; i < count; i++)
-        {
-            await ReadNextAsync(call, ct);
-        }
-    }
-
-    private static async Task AssertNoMoreResponsesAsync(
-        AsyncDuplexStreamingCall<ListenRequest, ListenResponse> call,
-        CancellationToken ct)
-    {
-        while (true)
-        {
-            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-            cts.CancelAfter(TimeSpan.FromMilliseconds(200));
-            try
-            {
-                var hasMore = await call.ResponseStream.MoveNext(cts.Token);
-                if (!hasMore)
-                {
-                    return;
-                }
-                // Skip NO_CHANGE heartbeats — they are protocol-level snapshot signals, not application data.
-                if (call.ResponseStream.Current is
-                    {
-                        ResponseTypeCase: ListenResponse.ResponseTypeOneofCase.TargetChange,
-                        TargetChange.TargetChangeType: TargetChange.Types.TargetChangeType.NoChange,
-                    })
-                {
-                    continue;
-                }
-                Assert.Fail($"Expected no more responses but received: {call.ResponseStream.Current}");
-            }
-            catch (OperationCanceledException) 
-            {
-                // expected — no more responses
-                return; 
-            }
-            catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled) 
-            {
-                // gRPC wraps cancellation
-                return;
-            }
-        }
-    }
 }

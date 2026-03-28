@@ -2,30 +2,16 @@ using FirestoreSharp.Tests.Unit.Builders;
 using Google.Cloud.Firestore.V1;
 using Google.Protobuf.WellKnownTypes;
 using Grpc.Core;
-using Grpc.Net.Client;
-using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
 using Value = Google.Cloud.Firestore.V1.Value;
 
+using Microsoft.AspNetCore.Mvc.Testing;
+
 namespace FirestoreSharp.Tests.Unit;
 
-public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class FirestoreServiceAggregationTests(WebApplicationFactory<Program> factory) : FirestoreServiceTestBase(factory)
 {
-    private readonly GrpcChannel _channel;
-    private readonly Firestore.FirestoreClient _client;
-
-    public FirestoreServiceAggregationTests(WebApplicationFactory<Program> factory)
-    {
-        var httpClient = factory.CreateDefaultClient();
-        _channel = GrpcChannel.ForAddress(httpClient.BaseAddress!, new GrpcChannelOptions
-        {
-            HttpClient = httpClient
-        });
-        _client = new Firestore.FirestoreClient(_channel);
-    }
-
-    public void Dispose() => _channel.Dispose();
 
     private static async Task<List<RunAggregationQueryResponse>> RunAggregationAsync(
         Firestore.FirestoreClient client,
@@ -52,7 +38,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
 
         for (var i = 1; i <= 3; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 builder.WithId($"doc{i}").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -64,7 +50,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "total"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var result = Assert.Single(responses).Result;
         Assert.Equal(3L, result.AggregateFields["total"].IntegerValue);
@@ -83,7 +69,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "total"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var result = Assert.Single(responses).Result;
         Assert.Equal(0L, result.AggregateFields["total"].IntegerValue);
@@ -98,7 +84,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
 
         for (var i = 1; i <= 5; i++)
         {
-            await _client.CreateDocumentAsync(
+            await Client.CreateDocumentAsync(
                 builder.WithId($"doc{i}").BuildCreateRequest(),
                 cancellationToken: TestContext.Current.CancellationToken);
         }
@@ -113,7 +99,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "capped"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var result = Assert.Single(responses).Result;
         Assert.Equal(3L, result.AggregateFields["capped"].IntegerValue);
@@ -126,9 +112,9 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-count-filter-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("active", true).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("active", true).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("c").WithField("active", false).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("active", true).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("active", true).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("c").WithField("active", false).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
         {
@@ -148,7 +134,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             });
         });
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var result = Assert.Single(responses).Result;
         Assert.Equal(2L, result.AggregateFields["active_count"].IntegerValue);
@@ -163,7 +149,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
 
         for (var i = 1; i <= 4; i++)
         {
-            await _client.CreateDocumentAsync(builder.WithId($"doc{i}").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+            await Client.CreateDocumentAsync(builder.WithId($"doc{i}").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
         }
 
         var request = builder.BuildAggregationQueryRequest(q =>
@@ -176,7 +162,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             });
         });
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var result = Assert.Single(responses).Result;
         Assert.Equal(2L, result.AggregateFields["limited"].IntegerValue);
@@ -191,9 +177,9 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-sum-int-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("c").WithField("score", 30L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("c").WithField("score", 30L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
             q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -205,7 +191,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "total_score"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var result = Assert.Single(responses).Result;
         var value = result.AggregateFields["total_score"];
@@ -220,8 +206,8 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-sum-mixed-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", 2.5).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", 2.5).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
             q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -233,7 +219,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "total"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["total"];
         Assert.Equal(Value.ValueTypeOneofCase.DoubleValue, value.ValueTypeCase);
@@ -256,7 +242,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "total"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["total"];
         Assert.Equal(Value.ValueTypeOneofCase.IntegerValue, value.ValueTypeCase);
@@ -270,10 +256,10 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-sum-skip-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", "not-a-number").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("c").WithNullField("score").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("d").WithField("other", 99L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", "not-a-number").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("c").WithNullField("score").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("d").WithField("other", 99L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
             q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -285,7 +271,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "total"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["total"];
         Assert.Equal(Value.ValueTypeOneofCase.IntegerValue, value.ValueTypeCase);
@@ -299,8 +285,8 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-sum-nan-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", double.NaN).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", double.NaN).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
             q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -312,7 +298,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "total"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["total"];
         Assert.Equal(Value.ValueTypeOneofCase.DoubleValue, value.ValueTypeCase);
@@ -328,9 +314,9 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-avg-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("c").WithField("score", 30L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("c").WithField("score", 30L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
             q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -342,7 +328,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "avg_score"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["avg_score"];
         Assert.Equal(Value.ValueTypeOneofCase.DoubleValue, value.ValueTypeCase);
@@ -365,7 +351,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "avg_score"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["avg_score"];
         Assert.Equal(Value.ValueTypeOneofCase.NullValue, value.ValueTypeCase);
@@ -378,9 +364,9 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-avg-skip-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("c").WithField("score", "ignored").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", 20L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("c").WithField("score", "ignored").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
             q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -392,7 +378,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "avg_score"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["avg_score"];
         Assert.Equal(Value.ValueTypeOneofCase.DoubleValue, value.ValueTypeCase);
@@ -406,8 +392,8 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-avg-nan-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", double.NaN).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", double.NaN).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
             q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -419,7 +405,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
                 Alias = "avg_score"
             }));
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var value = Assert.Single(responses).Result.AggregateFields["avg_score"];
         Assert.Equal(Value.ValueTypeOneofCase.DoubleValue, value.ValueTypeCase);
@@ -435,7 +421,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-alias-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 5L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 5L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Two aggregations without aliases — should get field_0 and field_1
         var request = builder.BuildAggregationQueryRequest(q =>
@@ -455,7 +441,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             });
         });
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var fields = Assert.Single(responses).Result.AggregateFields;
         Assert.True(fields.ContainsKey("field_0"), "Expected auto-alias field_0");
@@ -469,7 +455,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-alias-skip-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("x", 1L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("x", 1L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Explicit alias, then no alias, then explicit, then no alias
         // → auto-counter increments only for the un-aliased ones: field_0, field_1
@@ -503,7 +489,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             });
         });
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var fields = Assert.Single(responses).Result.AggregateFields;
         Assert.True(fields.ContainsKey("named_count"));
@@ -532,7 +518,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
 
         var ex = await Assert.ThrowsAsync<RpcException>(async () =>
         {
-            await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+            await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
         });
 
         Assert.Equal(StatusCode.InvalidArgument, ex.StatusCode);
@@ -547,8 +533,8 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-multi-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").WithField("score", 30L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").WithField("score", 10L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").WithField("score", 30L).BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(q =>
         {
@@ -575,7 +561,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             });
         });
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         var result = Assert.Single(responses).Result;
         Assert.Equal(2L, result.AggregateFields["count"].IntegerValue);
@@ -592,7 +578,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-newtxn-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(
             q => q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -602,7 +588,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             }),
             newTransaction: new TransactionOptions { ReadOnly = new TransactionOptions.Types.ReadOnly() });
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         Assert.Equal(2, responses.Count);
 
@@ -627,7 +613,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-newtxn-followup-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col).WithId("doc1").WithField("val", 42L);
 
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Start aggregation with new_transaction
         var request = builder.BuildAggregationQueryRequest(
@@ -638,7 +624,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             }),
             newTransaction: new TransactionOptions { ReadOnly = new TransactionOptions.Types.ReadOnly() });
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
         var transactionId = responses[0].Transaction;
         Assert.False(transactionId.IsEmpty);
 
@@ -648,11 +634,11 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             Name = builder.ExpectedName,
             Transaction = transactionId
         };
-        var doc = await _client.GetDocumentAsync(getRequest, cancellationToken: TestContext.Current.CancellationToken);
+        var doc = await Client.GetDocumentAsync(getRequest, cancellationToken: TestContext.Current.CancellationToken);
         Assert.Equal(42L, doc.Fields["val"].IntegerValue);
 
         // Clean up: rollback the read-only transaction
-        await _client.RollbackAsync(builder.BuildRollbackRequest(transactionId), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.RollbackAsync(builder.BuildRollbackRequest(transactionId), cancellationToken: TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -662,11 +648,11 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-txn-existing-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col);
 
-        await _client.CreateDocumentAsync(builder.WithId("a").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
-        await _client.CreateDocumentAsync(builder.WithId("b").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("a").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.WithId("b").BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Begin a transaction explicitly
-        var txn = await _client.BeginTransactionAsync(builder.BuildBeginTransactionRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var txn = await Client.BeginTransactionAsync(builder.BuildBeginTransactionRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(
             q => q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -676,7 +662,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             }),
             transaction: txn.Transaction);
 
-        var responses = await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        var responses = await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         // Single response — no first-response protocol for existing transactions
         var response = Assert.Single(responses);
@@ -685,7 +671,7 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         Assert.Equal(2L, response.Result.AggregateFields["total"].IntegerValue);
 
         // Rollback to clean up
-        await _client.RollbackAsync(builder.BuildRollbackRequest(txn.Transaction), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.RollbackAsync(builder.BuildRollbackRequest(txn.Transaction), cancellationToken: TestContext.Current.CancellationToken);
     }
 
     [Fact]
@@ -695,10 +681,10 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
         var col = $"agg-txn-conflict-{suffix}";
         var builder = new DocumentBuilder().WithCollection(col).WithId("doc1").WithField("score", 10L);
 
-        await _client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.CreateDocumentAsync(builder.BuildCreateRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Begin a read-write transaction and run an aggregation inside it
-        var txn = await _client.BeginTransactionAsync(builder.BuildBeginTransactionRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        var txn = await Client.BeginTransactionAsync(builder.BuildBeginTransactionRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         var request = builder.BuildAggregationQueryRequest(
             q => q.Aggregations.Add(new StructuredAggregationQuery.Types.Aggregation
@@ -708,14 +694,14 @@ public sealed class FirestoreServiceAggregationTests : IClassFixture<WebApplicat
             }),
             transaction: txn.Transaction);
 
-        await RunAggregationAsync(_client, request, TestContext.Current.CancellationToken);
+        await RunAggregationAsync(Client, request, TestContext.Current.CancellationToken);
 
         // Concurrently delete the document — mutates the subtree the transaction read
-        await _client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken);
+        await Client.DeleteDocumentAsync(builder.BuildDeleteRequest(), cancellationToken: TestContext.Current.CancellationToken);
 
         // Committing the transaction should now be aborted due to conflict
         var ex = await Assert.ThrowsAsync<RpcException>(() =>
-            _client.CommitAsync(builder.BuildTransactionalCommitRequest(txn.Transaction), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
+            Client.CommitAsync(builder.BuildTransactionalCommitRequest(txn.Transaction), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync);
 
         Assert.Equal(StatusCode.Aborted, ex.StatusCode);
     }
