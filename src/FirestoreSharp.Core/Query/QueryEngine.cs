@@ -98,10 +98,11 @@ internal static class QueryEngine
                 return true;
             }
 
-            // Segments in the parent after "documents" tells us where relative collections start.
             // DB root  (projects/p/databases/d/documents) → 0 parent segments
             // Doc path (projects/p/databases/d/documents/users/u1) → 2 parent segments
-            var parentSegmentCount = Math.Max(0, parent.Split('/').Length - 5);
+            var parentSegmentCount = DatabasePath.IsDatabaseRoot(parent, out _)
+                ? 0
+                : DocumentPath.Parse(parent).Collection.Segments.Count;
             var docPath = DocumentPath.Parse(name);
             return docPath.Collection.HasCollectionAfter(parentSegmentCount, selector.CollectionId);
         }

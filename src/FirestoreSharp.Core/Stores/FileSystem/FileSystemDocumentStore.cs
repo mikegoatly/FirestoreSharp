@@ -52,15 +52,15 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
 
     public async IAsyncEnumerable<Document> ListAsync(string parentPrefix, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
-        var collectionDir = GetCollectionDirectory(parentPrefix);
+        var (listDir, searchOption) = GetListDirectory(parentPrefix);
 
-        if (!Directory.Exists(collectionDir))
+        if (!Directory.Exists(listDir))
         {
             yield break;
         }
 
         var extension = _compressDocuments ? ".bin.gz" : ".bin";
-        var files = Directory.EnumerateFiles(collectionDir, "*" + extension, SearchOption.TopDirectoryOnly)
+        var files = Directory.EnumerateFiles(listDir, "*" + extension, searchOption)
             .Order(StringComparer.Ordinal);
 
         foreach (var file in files)
@@ -122,10 +122,24 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         return Path.Combine(_basePath, relativePath + extension);
     }
 
-    private string GetCollectionDirectory(string parentPrefix)
+    private (string Directory, SearchOption SearchOption) GetListDirectory(string parentPrefix)
     {
+        // Database root or document path (query parent): enumerate all descendants so
+        // QueryEngine receives all candidates regardless of AllDescendants flag.
+        if (DatabasePath.IsDatabaseRoot(parentPrefix, out var db))
+        {
+            return (Path.Combine(_basePath, db.Project, db.Database), SearchOption.AllDirectories);
+        }
+
+        if (DocumentPath.TryParse(parentPrefix) is { } docPath)
+        {
+            var docDir = Path.Combine(_basePath, Path.Combine(docPath.ToStorageSegments()));
+            return (docDir, SearchOption.AllDirectories);
+        }
+
+        // Collection path (ListDocuments): only direct children of the collection.
         var collection = CollectionPath.Parse(parentPrefix);
-        return Path.Combine(_basePath, Path.Combine(collection.ToStorageSegments()));
+        return (Path.Combine(_basePath, Path.Combine(collection.ToStorageSegments())), SearchOption.TopDirectoryOnly);
     }
 
     private async Task WriteDocumentAsync(string filePath, Document document, FileMode fileMode, CancellationToken cancellationToken)

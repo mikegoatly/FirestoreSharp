@@ -14,8 +14,9 @@ public sealed class CollectionPath
     private readonly int _segmentCount;
     private string[]? _segments; // lazily materialised on first Segments access
 
-    public string Project { get; }
-    public string Database { get; }
+    public DatabasePath DatabasePath { get; }
+    public string Project => DatabasePath.Project;
+    public string Database => DatabasePath.Database;
 
     /// <summary>The full collection resource name, e.g. <c>projects/p/databases/d/documents/users</c>.</summary>
     public ReadOnlyMemory<char> ResourceName { get; }
@@ -30,10 +31,9 @@ public sealed class CollectionPath
     /// </summary>
     public IReadOnlyList<string> Segments => GetMaterialisedSegments();
 
-    private CollectionPath(string project, string database, ReadOnlyMemory<char> resourceName, int segmentsStart, int segmentCount)
+    private CollectionPath(DatabasePath databasePath, ReadOnlyMemory<char> resourceName, int segmentsStart, int segmentCount)
     {
-        Project = project;
-        Database = database;
+        DatabasePath = databasePath;
         ResourceName = resourceName;
         _segmentsStart = segmentsStart;
         _segmentCount = segmentCount;
@@ -53,41 +53,80 @@ public sealed class CollectionPath
     /// </summary>
     public static CollectionPath Parse(ReadOnlyMemory<char> resourceName)
     {
+        if (!TryParse(resourceName, out var result, out var error))
+        {
+            ResourcePathParser.ThrowFormat(resourceName, "collection path", error);
+        }
+
+        return result;
+    }
+
+    internal static bool TryParse(ReadOnlyMemory<char> resourceName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out CollectionPath? result, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? error)
+    {
+        result = null;
         var remaining = resourceName.Span;
 
-        if (!TryConsume(ref remaining, "projects/"))
+        if (!ResourcePathParser.TryConsume(ref remaining, "projects/"))
         {
-            ThrowFormat(resourceName, "expected 'projects/' prefix");
+            error = "expected 'projects/' prefix";
+            return false;
         }
 
-        var project = ReadSegment(ref remaining, resourceName);
-
-        if (!TryConsume(ref remaining, "databases/"))
+        var slash = remaining.IndexOf('/');
+        if (slash <= 0)
         {
-            ThrowFormat(resourceName, "expected 'databases/' segment");
+            error = "empty or missing project ID";
+            return false;
+        }
+        var project = remaining[..slash].ToString();
+        remaining = remaining[(slash + 1)..];
+
+        if (!ResourcePathParser.TryConsume(ref remaining, "databases/"))
+        {
+            error = "expected 'databases/' segment";
+            return false;
         }
 
-        var database = ReadSegment(ref remaining, resourceName);
-
-        if (!TryConsume(ref remaining, "documents/"))
+        slash = remaining.IndexOf('/');
+        if (slash <= 0)
         {
-            ThrowFormat(resourceName, "expected 'documents/' followed by at least one segment");
+            error = "empty or missing database ID";
+            return false;
+        }
+        var database = remaining[..slash].ToString();
+        remaining = remaining[(slash + 1)..];
+
+        var databasePathMemory = resourceName[..^(remaining.Length + 1)];
+
+        if (!ResourcePathParser.TryConsume(ref remaining, "documents/"))
+        {
+            error = "expected 'documents/' followed by at least one segment";
+            return false;
         }
 
         if (remaining.IsEmpty)
         {
-            ThrowFormat(resourceName, "no segments after 'documents'");
+            error = "no segments after 'documents'";
+            return false;
         }
 
         var segmentsStart = resourceName.Length - remaining.Length;
-        var segmentCount = CountAndValidateSegments(remaining, resourceName);
+
+        if (!ResourcePathParser.TryCountAndValidateSegments(remaining, out var segmentCount))
+        {
+            error = "empty or whitespace segment";
+            return false;
+        }
 
         if (segmentCount % 2 == 0)
         {
-            ThrowFormat(resourceName, $"collection path requires an odd segment count after 'documents', got {segmentCount}");
+            error = $"collection path requires an odd segment count after 'documents', got {segmentCount}";
+            return false;
         }
 
-        return new CollectionPath(project.ToString(), database.ToString(), resourceName, segmentsStart, segmentCount);
+        result = new CollectionPath(DatabasePath.FromParsed(databasePathMemory, project, database), resourceName, segmentsStart, segmentCount);
+        error = null;
+        return true;
     }
 
     /// <summary>
@@ -192,60 +231,4 @@ public sealed class CollectionPath
         return segments;
     }
 
-    // Advances span past prefix; returns false (without advancing) if not matched.
-    private static bool TryConsume(ref ReadOnlySpan<char> span, string prefix)
-    {
-        if (!span.StartsWith(prefix.AsSpan(), StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        span = span[prefix.Length..];
-        return true;
-    }
-
-    // Reads a non-empty, non-whitespace segment up to the next '/', advancing span past both.
-    private static ReadOnlySpan<char> ReadSegment(ref ReadOnlySpan<char> span, ReadOnlyMemory<char> fullPath)
-    {
-        var slash = span.IndexOf('/');
-        if (slash < 0)
-        {
-            ThrowFormat(fullPath, "unexpected end of path");
-        }
-
-        var seg = span[..slash];
-        if (seg.IsEmpty || seg.Trim().IsEmpty)
-        {
-            ThrowFormat(fullPath, "empty or whitespace path segment");
-        }
-
-        span = span[(slash + 1)..];
-        return seg;
-    }
-
-    // Counts segments separated by '/', validating each is non-empty and non-whitespace.
-    private static int CountAndValidateSegments(ReadOnlySpan<char> span, ReadOnlyMemory<char> fullPath)
-    {
-        var count = 0;
-        var segStart = 0;
-        for (var i = 0; i <= span.Length; i++)
-        {
-            if (i == span.Length || span[i] == '/')
-            {
-                var seg = span[segStart..i];
-                if (seg.IsEmpty || seg.Trim().IsEmpty)
-                {
-                    ThrowFormat(fullPath, "empty or whitespace segment");
-                }
-
-                count++;
-                segStart = i + 1;
-            }
-        }
-        return count;
-    }
-
-    [System.Diagnostics.CodeAnalysis.DoesNotReturn]
-    private static void ThrowFormat(ReadOnlyMemory<char> resourceName, string reason) =>
-        throw new ArgumentException($"Invalid collection path ({reason}): '{resourceName}'", nameof(resourceName));
 }

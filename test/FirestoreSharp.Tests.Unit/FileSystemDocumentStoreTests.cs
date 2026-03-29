@@ -255,4 +255,31 @@ public sealed class FileSystemDocumentStoreTests : IDisposable
 
         Assert.Equal(StatusCode.NotFound, ex.StatusCode);
     }
+
+    [Fact]
+    public async Task ListAsync_DatabaseRootParent_ReturnsAllDocuments()
+    {
+        var store = CreateStore();
+        var b1 = new DocumentBuilder().WithCollection("users").WithId("u1");
+        var b2 = new DocumentBuilder().WithCollection("orders").WithId("o1");
+        var b3 = new DocumentBuilder()
+            .WithParent("projects/test-project/databases/(default)/documents/users/u1")
+            .WithCollection("posts")
+            .WithId("post1");
+
+        await store.CreateAsync(b1.BuildPath(), b1.Build(), TestContext.Current.CancellationToken);
+        await store.CreateAsync(b2.BuildPath(), b2.Build(), TestContext.Current.CancellationToken);
+        await store.CreateAsync(b3.BuildPath(), b3.Build(), TestContext.Current.CancellationToken);
+
+        var databaseRoot = "projects/test-project/databases/(default)/documents";
+        var results = new List<string>();
+        await foreach (var doc in store.ListAsync(databaseRoot, TestContext.Current.CancellationToken))
+        {
+            results.Add(doc.Name);
+        }
+
+        Assert.Contains(b1.ExpectedName, results);
+        Assert.Contains(b2.ExpectedName, results);
+        Assert.Contains(b3.ExpectedName, results);
+    }
 }

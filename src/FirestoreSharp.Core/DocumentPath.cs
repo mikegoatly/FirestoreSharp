@@ -32,25 +32,56 @@ public sealed class DocumentPath
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
 
+        if (!TryParse(resourceName, out var result, out var error))
+        {
+            ResourcePathParser.ThrowFormat(resourceName.AsMemory(), "document path", error);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Returns a parsed <see cref="DocumentPath"/> if <paramref name="resourceName"/> is a valid
+    /// document path, or <c>null</c> if it is not (e.g. a collection path or database root).
+    /// </summary>
+    public static DocumentPath? TryParse(string resourceName)
+    {
+        if (string.IsNullOrWhiteSpace(resourceName))
+        {
+            return null;
+        }
+
+        return TryParse(resourceName, out var result, out _) ? result : null;
+    }
+
+    private static bool TryParse(string resourceName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out DocumentPath? result, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? error)
+    {
+        result = null;
+
         var lastSlash = resourceName.LastIndexOf('/');
         if (lastSlash < 0)
         {
-            throw new ArgumentException($"Invalid document path: '{resourceName}'", nameof(resourceName));
+            error = "missing '/'";
+            return false;
         }
 
         var documentId = resourceName[(lastSlash + 1)..];
         if (documentId.Length == 0 || documentId.AsSpan().IsWhiteSpace())
         {
-            throw new ArgumentException($"Invalid document path (empty or whitespace document ID): '{resourceName}'", nameof(resourceName));
+            error = "empty or whitespace document ID";
+            return false;
         }
 
-        // CollectionPath.Parse validates the projects/.../databases/.../documents/... prefix
-        // and requires an odd segment count — exactly the shape of the collection part of a
-        // valid document resource name. An even total doc-path length (the document requirement)
-        // follows automatically: odd collection segments + 1 document ID = even.
-        var collection = CollectionPath.Parse(resourceName.AsMemory()[..lastSlash]);
+        // CollectionPath.TryParse validates the prefix and requires an odd segment count —
+        // exactly the shape of the collection part of a valid document resource name.
+        if (!CollectionPath.TryParse(resourceName.AsMemory()[..lastSlash], out var collection, out error))
+        {
+            return false;
+        }
 
-        return new DocumentPath(collection, documentId, resourceName);
+        result = new DocumentPath(collection, documentId, resourceName);
+        error = null;
+        return true;
     }
 
     /// <summary>
