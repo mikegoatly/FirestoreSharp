@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.1.0...firestoresharp-v0.1.1) (2026-03-29)
+
+
+### Bug Fixes
+
+* FileSystem listener error on database-root queries ([6f2662a](https://github.com/mikegoatly/FirestoreSharp/commit/6f2662a935f01190c718b3a2ca86d97363666ab3))
+
 ## [0.1.0](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.0.1...firestoresharp-v0.1.0) (2026-03-28)
 
 
