@@ -1,6 +1,6 @@
 // ── Document editor ────────────────────────────────────────────────────────
 
-import { state, docsBase } from '/ui/state.js';
+import { state, docsBase, NAV } from '/ui/state.js';
 import { API, apiFetch, esc } from '/ui/api.js';
 import { renderValue } from '/ui/render.js';
 
@@ -111,7 +111,7 @@ export async function saveDocument() {
   try {
     if (state.editorMode === 'create') {
       const collectionId = els.editorPanel.dataset.createCollection;
-      const collEntry = state.navStack.find(n => n.type === 'collection' && n.id === collectionId);
+      const collEntry = state.navStack.find(n => n.type === NAV.COLLECTION && n.id === collectionId);
       const parent = collEntry?.parentForDocs ?? docsBase();
 
       const body = JSON.stringify({ documentId: null, fields });
@@ -130,7 +130,7 @@ export async function saveDocument() {
         { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body }
       );
       showEditorView(data);
-      const collEntry = state.navStack.find(n => n.type === 'collection');
+      const collEntry = state.navStack.find(n => n.type === NAV.COLLECTION);
       if (collEntry) _loadDocuments(collEntry.id);
     }
   } catch (e) {
@@ -146,7 +146,8 @@ export async function deleteDocument(onDeleted) {
   try {
     await apiFetch(`${API}/document?resourceName=${encodeURIComponent(resourceName)}`, { method: 'DELETE' });
 
-    if (state.navStack[state.navStack.length - 1]?.resourceName === resourceName) {
+    if (state.navStack[state.navStack.length - 1]?.type === NAV.DOCUMENT &&
+        state.navStack[state.navStack.length - 1]?.resourceName === resourceName) {
       state.navStack.pop();
     }
 

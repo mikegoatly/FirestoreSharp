@@ -1,3 +1,18 @@
+// ── Nav entry types & factories ────────────────────────────────────────────
+
+export const NAV = {
+  COLLECTION: 'collection',
+  DOCUMENT: 'document',
+};
+
+export function navCollection(id, parentForDocs) {
+  return { type: NAV.COLLECTION, id, resourceName: `${parentForDocs}/${id}`, parentForDocs };
+}
+
+export function navDocument(id, resourceName) {
+  return { type: NAV.DOCUMENT, id, resourceName, parentForDocs: resourceName };
+}
+
 // ── State ──────────────────────────────────────────────────────────────────
 
 export const state = {
@@ -5,7 +20,7 @@ export const state = {
   database: '(default)',
   knownDatabases: [],  // array of { project, database }
 
-  // Navigation stack: array of { type: 'collection'|'document', id, resourceName }
+  // Navigation stack: array of nav entries created by navCollection/navDocument
   navStack: [],
 
   activeCollection: null,   // collection ID currently shown in middle panel

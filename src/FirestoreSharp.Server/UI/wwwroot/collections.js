@@ -1,6 +1,6 @@
 // ── Collections & documents panels ────────────────────────────────────────
 
-import { state, docsBase, currentParent } from '/ui/state.js';
+import { state, docsBase, currentParent, NAV, navCollection, navDocument } from '/ui/state.js';
 import { API, apiFetch, esc } from '/ui/api.js';
 import { renderValue } from '/ui/render.js';
 
@@ -84,7 +84,7 @@ export function selectCollection(collectionId) {
 
   const panelParent = state.collectionsPanelParent ?? docsBase();
   const last = state.navStack[state.navStack.length - 1];
-  if (!last || last.type !== 'collection' || last.id !== collectionId || last.parentForDocs !== panelParent) {
+  if (!last || last.type !== NAV.COLLECTION || last.id !== collectionId || last.parentForDocs !== panelParent) {
     // Trim the stack back to the entries that lead up to panelParent, then push this collection.
     // This handles the case where the collections panel was repopulated by loadSubcollections()
     // after opening a document — clicking a root collection shouldn't append to the existing stack.
@@ -92,12 +92,7 @@ export function selectCollection(collectionId) {
       entry => entry.resourceName === panelParent
     );
     state.navStack = baseDepth >= 0 ? state.navStack.slice(0, baseDepth + 1) : [];
-    state.navStack.push({
-      type: 'collection',
-      id: collectionId,
-      resourceName: `${panelParent}/${collectionId}`,
-      parentForDocs: panelParent,
-    });
+    state.navStack.push(navCollection(collectionId, panelParent));
   }
 
   _renderBreadcrumb();
@@ -216,16 +211,11 @@ export async function openDocument(resourceName, collectionId) {
     _showEditorView(data);
 
     const collEntry = state.navStack[state.navStack.length - 1];
-    if (!collEntry || collEntry.type !== 'document' || collEntry.id !== data.documentId) {
-      if (state.navStack[state.navStack.length - 1]?.type === 'document') {
+    if (!collEntry || collEntry.type !== NAV.DOCUMENT || collEntry.id !== data.documentId) {
+      if (state.navStack[state.navStack.length - 1]?.type === NAV.DOCUMENT) {
         state.navStack.pop();
       }
-      state.navStack.push({
-        type: 'document',
-        id: data.documentId,
-        resourceName: resourceName,
-        parentForDocs: resourceName,
-      });
+      state.navStack.push(navDocument(data.documentId, resourceName));
     }
 
     _renderBreadcrumb();
@@ -276,12 +266,7 @@ export async function confirmNewCollection() {
   hideNewCollectionModal();
 
   const parent = currentParent();
-  state.navStack.push({
-    type: 'collection',
-    id: id,
-    resourceName: `${parent}/${id}`,
-    parentForDocs: parent,
-  });
+  state.navStack.push(navCollection(id, parent));
   state.activeCollection = id;
   _renderBreadcrumb();
 

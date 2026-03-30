@@ -1,7 +1,7 @@
 // FirestoreSharp Emulator UI
 // Vanilla JS, no dependencies.
 
-import { state } from '/ui/state.js';
+import { state, NAV } from '/ui/state.js';
 import { API, apiFetch, esc } from '/ui/api.js';
 import {
   loadCollections, renderCollections, selectCollection,
@@ -66,7 +66,7 @@ function renderBreadcrumb() {
         closeEditor();
         renderBreadcrumb();
 
-        if (item.type === 'document') {
+        if (item.type === NAV.DOCUMENT) {
           loadCollections();
           clearDocuments();
         } else {
@@ -116,7 +116,7 @@ els.modalNewCollection.querySelector('.modal-backdrop').addEventListener('click'
 
 els.btnNewDocument.addEventListener('click', () => {
   const collEntry = state.navStack[state.navStack.length - 1];
-  if (collEntry && collEntry.type === 'collection') {
+  if (collEntry && collEntry.type === NAV.COLLECTION) {
     showCreateMode(collEntry.id);
   }
 });
@@ -126,7 +126,7 @@ els.btnDeleteDoc.addEventListener('click', () => deleteDocument(() => {
   closeEditor();
   renderBreadcrumb();
   const collEntry = state.navStack[state.navStack.length - 1];
-  if (collEntry && collEntry.type === 'collection') {
+  if (collEntry && collEntry.type === NAV.COLLECTION) {
     loadDocuments(collEntry.id);
     loadCollections();
   } else {
