@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.1.1...firestoresharp-v0.1.2) (2026-03-30)
+
+
+### Bug Fixes
+
+* Refactor to use more ReadOnlyMemory ([30cd847](https://github.com/mikegoatly/FirestoreSharp/commit/30cd847cdca9c4efe4491d9e5c05d702a6c265f1))
+
 ## [0.1.1](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.1.0...firestoresharp-v0.1.1) (2026-03-29)
 
 
