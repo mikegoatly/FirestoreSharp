@@ -15,6 +15,11 @@ export const state = {
   // Pagination
   docPageToken: null,
   collPageToken: null,
+
+  // Parent resource name that the collections panel is currently showing.
+  // Tracked separately because the panel can be repopulated by subcollection
+  // loads while the nav stack points somewhere deeper.
+  collectionsPanelParent: null,
 };
 
 export function docsBase() {

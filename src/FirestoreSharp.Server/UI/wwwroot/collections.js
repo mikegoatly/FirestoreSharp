@@ -18,6 +18,7 @@ export function setCallbacks(closeEditor, renderBreadcrumb, showCreateMode) {
 
 export async function loadCollections(pageToken = null) {
   const parent = currentParent();
+  if (!pageToken) state.collectionsPanelParent = parent;
   try {
     const params = new URLSearchParams({ parent });
     if (pageToken) params.set('pageToken', pageToken);
@@ -83,18 +84,22 @@ export function selectCollection(collectionId) {
     el.classList.toggle('active', el.querySelector('.coll-name')?.textContent === collectionId);
   });
 
+  const panelParent = state.collectionsPanelParent ?? docsBase();
   const last = state.navStack[state.navStack.length - 1];
-  if (!last || last.type !== 'collection' || last.id !== collectionId) {
-    if (last && last.type === 'document') {
-      state.navStack.pop();
-    }
-    const parent = currentParent();
+  if (!last || last.type !== 'collection' || last.id !== collectionId || last.parentForDocs !== panelParent) {
+    // Trim the stack back to the entries that lead up to panelParent, then push this collection.
+    // This handles the case where the collections panel was repopulated by loadSubcollections()
+    // after opening a document — clicking a root collection shouldn't append to the existing stack.
+    const baseDepth = state.navStack.findIndex(
+      entry => entry.resourceName === panelParent
+    );
+    state.navStack = baseDepth >= 0 ? state.navStack.slice(0, baseDepth + 1) : [];
     state.navStack.push({
       type: 'collection',
       id: collectionId,
-      resourceName: `${parent}/${collectionId}`
+      resourceName: `${panelParent}/${collectionId}`,
+      parentForDocs: panelParent,
     });
-    state.navStack[state.navStack.length - 1].parentForDocs = parent;
   }
 
   _renderBreadcrumb();
@@ -237,6 +242,7 @@ async function loadSubcollections(docResourceName) {
   try {
     const params = new URLSearchParams({ parent: docResourceName });
     const data = await apiFetch(`${API}/collections?${params}`);
+    state.collectionsPanelParent = docResourceName;
     renderCollections(data);
   } catch {
     // Ignore subcollection load errors silently
