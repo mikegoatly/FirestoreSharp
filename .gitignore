@@ -361,3 +361,6 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
+
+# Allow the husky/csx folder to be tracked, but ignore all other csx files
+!.husky/csx/
