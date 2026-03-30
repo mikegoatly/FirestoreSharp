@@ -17,6 +17,7 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
 {
     private readonly FirestoreService _firestore;
     private FirestoreChangeListener? _listener;
+    private FirestoreChangeListener? _subTaskListener;
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
@@ -27,9 +28,16 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
     private string _newTitle = string.Empty;
 
     [ObservableProperty]
+    private string _newSubTaskTitle = string.Empty;
+
+    [ObservableProperty]
     private string _statusText = "Starting…";
 
+    [ObservableProperty]
+    private SubTaskItemViewModel? _selectedSubTask;
+
     public ObservableCollection<TodoItemViewModel> Items { get; } = [];
+    public ObservableCollection<SubTaskItemViewModel> SubTasks { get; } = [];
     public ObservableCollection<string> ActivityLog { get; } = [];
 
     public MainViewModel(FirestoreService firestore)
@@ -111,6 +119,154 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
             });
         });
     }
+
+    partial void OnSelectedItemChanged(TodoItemViewModel? value)
+    {
+        SubTasks.Clear();
+        NewSubTaskTitle = string.Empty;
+        SelectedSubTask = null;
+
+        // Stop previous subtask listener
+        if (_subTaskListener is { } old)
+        {
+            _ = old.StopAsync();
+            _subTaskListener = null;
+        }
+
+        if (value?.Id is not null)
+        {
+            _ = LoadSubTasksAsync(value.Id);
+        }
+    }
+
+    private async Task LoadSubTasksAsync(string todoId)
+    {
+        try
+        {
+            var items = await _firestore.GetSubTasksAsync(todoId).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SubTasks.Clear();
+                foreach (var item in items)
+                {
+                    SubTasks.Add(new SubTaskItemViewModel(item));
+                }
+            });
+            StartSubTaskListener(todoId);
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => LogActivity($"ERROR loading subtasks: {ex.Message}"));
+        }
+    }
+
+    private void StartSubTaskListener(string todoId)
+    {
+        _subTaskListener = _firestore.ListenSubTasks(todoId, snapshot =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                foreach (var change in snapshot.Changes)
+                {
+                    var item = change.Document.ConvertTo<SubTaskItem>();
+                    var timestamp = DateTime.Now.ToString("HH:mm:ss.fff");
+
+                    switch (change.ChangeType)
+                    {
+                        case DocumentChange.Type.Added:
+                            if (FindSubTaskById(change.Document.Id) is null)
+                            {
+                                SubTasks.Add(new SubTaskItemViewModel(item));
+                            }
+                            LogActivity($"[{timestamp}] SUBTASK ADDED: {item.Title}");
+                            break;
+
+                        case DocumentChange.Type.Modified:
+                            var existing = FindSubTaskById(change.Document.Id);
+                            existing?.UpdateFrom(item);
+                            LogActivity($"[{timestamp}] SUBTASK MODIFIED: {item.Title}");
+                            break;
+
+                        case DocumentChange.Type.Removed:
+                            var removed = FindSubTaskById(change.Document.Id);
+                            if (removed is not null)
+                            {
+                                SubTasks.Remove(removed);
+                            }
+                            LogActivity($"[{timestamp}] SUBTASK REMOVED: {item.Title}");
+                            break;
+                    }
+                }
+            });
+        });
+    }
+
+    [RelayCommand]
+    private async Task AddSubTaskAsync()
+    {
+        var title = NewSubTaskTitle.Trim();
+        if (string.IsNullOrEmpty(title) || SelectedItem?.Id is null)
+        {
+            return;
+        }
+
+        var item = new SubTaskItem { Title = title };
+        try
+        {
+            await _firestore.CreateSubTaskAsync(SelectedItem.Id, item).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() => NewSubTaskTitle = string.Empty);
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => LogActivity($"ERROR creating subtask: {ex.Message}"));
+        }
+    }
+
+    [RelayCommand]
+    private async Task DeleteSubTaskAsync(SubTaskItemViewModel subTask)
+    {
+        if (SelectedItem?.Id is null || subTask.Id is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _firestore.DeleteSubTaskAsync(SelectedItem.Id, subTask.Id).ConfigureAwait(false);
+            await Dispatcher.UIThread.InvokeAsync(() =>
+            {
+                SubTasks.Remove(subTask);
+                if (SelectedSubTask == subTask) SelectedSubTask = null;
+            });
+        }
+        catch (Exception ex)
+        {
+            await Dispatcher.UIThread.InvokeAsync(() => LogActivity($"ERROR deleting subtask: {ex.Message}"));
+        }
+    }
+
+    [RelayCommand]
+    private async Task ToggleSubTaskAsync(SubTaskItemViewModel subTask)
+    {
+        if (SelectedItem?.Id is null || subTask.Id is null)
+        {
+            return;
+        }
+
+        try
+        {
+            subTask.Completed = !subTask.Completed;
+            await _firestore.UpdateSubTaskAsync(SelectedItem.Id, subTask.ToModel()).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            subTask.Completed = !subTask.Completed; // revert
+            await Dispatcher.UIThread.InvokeAsync(() => LogActivity($"ERROR toggling subtask: {ex.Message}"));
+        }
+    }
+
+    private SubTaskItemViewModel? FindSubTaskById(string id) =>
+        SubTasks.FirstOrDefault(s => string.Equals(s.Id, id, StringComparison.Ordinal));
 
     [RelayCommand]
     private async Task AddBatchAsync()
@@ -235,7 +391,42 @@ public sealed partial class MainViewModel : ObservableObject, IAsyncDisposable
         {
             await listener.StopAsync();
         }
+
+        if (_subTaskListener is { } subTaskListener)
+        {
+            await subTaskListener.StopAsync();
+        }
     }
+}
+
+/// <summary>
+/// Wraps a <see cref="SubTaskItem"/> for data binding with change notification.
+/// </summary>
+public sealed partial class SubTaskItemViewModel : ObservableObject
+{
+    [ObservableProperty] private string? _id;
+    [ObservableProperty] private string _title = string.Empty;
+    [ObservableProperty] private bool _completed;
+
+    public SubTaskItemViewModel(SubTaskItem model)
+    {
+        Id = model.Id;
+        Title = model.Title;
+        Completed = model.Completed;
+    }
+
+    public void UpdateFrom(SubTaskItem model)
+    {
+        Title = model.Title;
+        Completed = model.Completed;
+    }
+
+    public SubTaskItem ToModel() => new()
+    {
+        Id = Id,
+        Title = Title,
+        Completed = Completed,
+    };
 }
 
 /// <summary>

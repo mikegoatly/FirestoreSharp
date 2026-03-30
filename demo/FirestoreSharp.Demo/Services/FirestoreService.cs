@@ -9,6 +9,7 @@ public sealed class FirestoreService
     private const string EmulatorHost = "localhost:5017";
     private const string ProjectId = "local";
     private const string CollectionName = "todos";
+    private const string SubTasksCollectionName = "SubTasks";
 
     private readonly FirestoreDb _db;
 
@@ -25,6 +26,8 @@ public sealed class FirestoreService
     }
 
     private CollectionReference Collection => _db.Collection(CollectionName);
+    private CollectionReference SubTasksCollection(string todoId) =>
+        Collection.Document(todoId).Collection(SubTasksCollectionName);
 
     public async Task<List<TodoItem>> GetAllAsync()
     {
@@ -85,5 +88,39 @@ public sealed class FirestoreService
     public FirestoreChangeListener Listen(Action<QuerySnapshot> onChanged)
     {
         return Collection.Listen(onChanged);
+    }
+
+    // ── SubTask methods ──────────────────────────────────────────────────────
+
+    public async Task<List<SubTaskItem>> GetSubTasksAsync(string todoId)
+    {
+        var snapshot = await SubTasksCollection(todoId).GetSnapshotAsync().ConfigureAwait(false);
+        return snapshot.Documents
+            .Select(d => d.ConvertTo<SubTaskItem>())
+            .ToList();
+    }
+
+    public async Task<string> CreateSubTaskAsync(string todoId, SubTaskItem item)
+    {
+        var docRef = await SubTasksCollection(todoId).AddAsync(item).ConfigureAwait(false);
+        return docRef.Id;
+    }
+
+    public async Task UpdateSubTaskAsync(string todoId, SubTaskItem item)
+    {
+        if (item.Id is null) return;
+        var docRef = SubTasksCollection(todoId).Document(item.Id);
+        await docRef.SetAsync(item, SetOptions.Overwrite).ConfigureAwait(false);
+    }
+
+    public async Task DeleteSubTaskAsync(string todoId, string subTaskId)
+    {
+        var docRef = SubTasksCollection(todoId).Document(subTaskId);
+        await docRef.DeleteAsync().ConfigureAwait(false);
+    }
+
+    public FirestoreChangeListener ListenSubTasks(string todoId, Action<QuerySnapshot> onChanged)
+    {
+        return SubTasksCollection(todoId).Listen(onChanged);
     }
 }
