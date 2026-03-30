@@ -57,7 +57,6 @@ function renderCollectionItems(data, container, append) {
     el.className = 'collection-item';
     if (id === state.activeCollection) el.classList.add('active');
     el.innerHTML = `<span class="coll-icon">◉</span><span class="coll-name">${esc(id)}</span>`;
-    el.addEventListener('click', () => selectCollection(id));
     container.appendChild(el);
   });
 
@@ -69,7 +68,6 @@ function renderCollectionItems(data, container, append) {
     const more = document.createElement('div');
     more.className = 'load-more';
     more.innerHTML = `<button class="btn-load-more">Load more collections</button>`;
-    more.querySelector('button').addEventListener('click', () => loadCollections(state.collPageToken));
     els.collectionsList.appendChild(more);
   } else {
     state.collPageToken = null;
@@ -163,6 +161,7 @@ function renderDocumentItems(data, collectionId, container, append) {
   data.documents.forEach(doc => {
     const el = document.createElement('div');
     el.className = 'document-item';
+    el.dataset.collectionId = collectionId;
     if (doc.resourceName === state.activeDocument) el.classList.add('active');
 
     const fieldKeys = Object.keys(doc.fields || {});
@@ -178,7 +177,6 @@ function renderDocumentItems(data, collectionId, container, append) {
       <div class="doc-preview">${previewFields}${more}</div>
     `;
 
-    el.addEventListener('click', () => openDocument(doc.resourceName, collectionId));
     container.appendChild(el);
   });
 
@@ -190,7 +188,6 @@ function renderDocumentItems(data, collectionId, container, append) {
     const more = document.createElement('div');
     more.className = 'load-more';
     more.innerHTML = `<button class="btn-load-more">Load more documents</button>`;
-    more.querySelector('button').addEventListener('click', () => loadDocuments(collectionId, state.docPageToken));
     els.documentsList.appendChild(more);
   } else {
     state.docPageToken = null;
@@ -307,3 +304,21 @@ const els = {
   newCollectionId:      document.getElementById('new-collection-id'),
   newCollectionError:   document.getElementById('new-collection-error'),
 };
+
+// ── Event delegation ───────────────────────────────────────────────────────
+
+els.collectionsList.addEventListener('click', e => {
+  const item = e.target.closest('.collection-item');
+  if (item) selectCollection(item.querySelector('.coll-name').textContent);
+
+  const btn = e.target.closest('.btn-load-more');
+  if (btn && btn.closest('#collections-list')) loadCollections(state.collPageToken);
+});
+
+els.documentsList.addEventListener('click', e => {
+  const item = e.target.closest('.document-item');
+  if (item) openDocument(item.querySelector('.doc-id').title, item.dataset.collectionId);
+
+  const btn = e.target.closest('.btn-load-more');
+  if (btn && btn.closest('#documents-list')) loadDocuments(state.activeCollection, state.docPageToken);
+});
