@@ -95,7 +95,7 @@ internal static class UiEndpoints
     {
         try
         {
-            var path = DocumentPath.Parse(resourceName);
+            var path = DocumentPath.Parse(resourceName.AsMemory());
             var doc = await documentService.GetAsync(path, cancellationToken: cancellationToken).ConfigureAwait(false);
             return Results.Ok(ToDocumentResponse(doc));
         }
@@ -143,7 +143,7 @@ internal static class UiEndpoints
     {
         try
         {
-            var path = DocumentPath.Parse(resourceName);
+            var path = DocumentPath.Parse(resourceName.AsMemory());
             var doc = new Document { Name = resourceName };
             if (body.Fields is not null)
             {
@@ -167,7 +167,7 @@ internal static class UiEndpoints
     {
         try
         {
-            var path = DocumentPath.Parse(resourceName);
+            var path = DocumentPath.Parse(resourceName.AsMemory());
             await documentService.DeleteAsync(path, cancellationToken).ConfigureAwait(false);
             return Results.NoContent();
         }

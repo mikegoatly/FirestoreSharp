@@ -29,13 +29,6 @@ public readonly record struct DatabasePath
     internal static DatabasePath FromParsed(ReadOnlyMemory<char> resourceName, string project, string database)
         => new(resourceName, project, database);
 
-    /// <inheritdoc cref="Parse(ReadOnlyMemory{char})"/>
-    public static DatabasePath Parse(string resourceName)
-    {
-        ArgumentNullException.ThrowIfNull(resourceName);
-        return Parse(resourceName.AsMemory());
-    }
-
     /// <summary>
     /// Parses a database resource name into a <see cref="DatabasePath"/>.
     /// </summary>
@@ -72,13 +65,12 @@ public readonly record struct DatabasePath
     /// (i.e. <c>projects/{p}/databases/{d}/documents</c> with no further segments),
     /// and outputs the parsed <see cref="DatabasePath"/> if so.
     /// </summary>
-    public static bool IsDatabaseRoot(string parent, out DatabasePath databasePath)
+    public static bool IsDatabaseRoot(ReadOnlyMemory<char> parent, out DatabasePath databasePath)
     {
-        ArgumentNullException.ThrowIfNull(parent);
         const string documentsMarker = "/documents";
-        if (parent.EndsWith(documentsMarker, StringComparison.Ordinal))
+        if (parent.Span.EndsWith(documentsMarker, StringComparison.Ordinal))
         {
-            var candidate = parent.AsMemory()[..^documentsMarker.Length];
+            var candidate = parent[..^documentsMarker.Length];
             if (TryParse(candidate, out databasePath))
             {
                 return true;
@@ -95,7 +87,7 @@ public readonly record struct DatabasePath
 
         if (!ResourcePathParser.TryConsume(ref remaining, "projects/"))
         {
-            result = default; 
+            result = default;
             return false;
         }
 
@@ -110,13 +102,13 @@ public readonly record struct DatabasePath
 
         if (!ResourcePathParser.TryConsume(ref remaining, "databases/"))
         {
-            result = default; 
+            result = default;
             return false;
         }
 
         if (remaining.IsEmpty)
         {
-            result = default; 
+            result = default;
             return false;
         }
         var database = remaining.ToString();

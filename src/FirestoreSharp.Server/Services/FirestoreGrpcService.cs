@@ -30,7 +30,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = DocumentPath.Parse(request.Name);
+        var path = DocumentPath.Parse(request.Name.AsMemory());
 
         var isTransactional = request.ConsistencySelectorCase == GetDocumentRequest.ConsistencySelectorOneofCase.Transaction
                               && !request.Transaction.IsEmpty;
@@ -51,7 +51,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = DocumentPath.Parse(request.Document.Name);
+        var path = DocumentPath.Parse(request.Document.Name.AsMemory());
         var maskPaths = request.UpdateMask?.FieldPaths;
         IReadOnlyList<string>? updateMask = maskPaths is { Count: > 0 } ? [.. maskPaths] : null;
         return await documentService.UpdateAsync(path, request.Document, updateMask, context.CancellationToken).ConfigureAwait(false);
@@ -62,7 +62,7 @@ public sealed class FirestoreGrpcService(IDocumentService documentService, ITran
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
 
-        var path = DocumentPath.Parse(request.Name);
+        var path = DocumentPath.Parse(request.Name.AsMemory());
         await documentService.DeleteAsync(path, context.CancellationToken).ConfigureAwait(false);
         return new Empty();
     }

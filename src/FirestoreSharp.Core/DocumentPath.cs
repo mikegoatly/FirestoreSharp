@@ -28,13 +28,11 @@ public sealed class DocumentPath
     /// <summary>
     /// Parses a full document resource name into a <see cref="DocumentPath"/>.
     /// </summary>
-    public static DocumentPath Parse(string resourceName)
+    public static DocumentPath Parse(ReadOnlyMemory<char> resourceName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(resourceName);
-
         if (!TryParse(resourceName, out var result, out var error))
         {
-            ResourcePathParser.ThrowFormat(resourceName.AsMemory(), "document path", error);
+            ResourcePathParser.ThrowFormat(resourceName, "document path", error);
         }
 
         return result;
@@ -44,9 +42,9 @@ public sealed class DocumentPath
     /// Returns a parsed <see cref="DocumentPath"/> if <paramref name="resourceName"/> is a valid
     /// document path, or <c>null</c> if it is not (e.g. a collection path or database root).
     /// </summary>
-    public static DocumentPath? TryParse(string resourceName)
+    public static DocumentPath? TryParse(ReadOnlyMemory<char> resourceName)
     {
-        if (string.IsNullOrWhiteSpace(resourceName))
+        if (resourceName.IsEmpty || resourceName.Span.IsWhiteSpace())
         {
             return null;
         }
@@ -54,11 +52,11 @@ public sealed class DocumentPath
         return TryParse(resourceName, out var result, out _) ? result : null;
     }
 
-    private static bool TryParse(string resourceName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out DocumentPath? result, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? error)
+    private static bool TryParse(ReadOnlyMemory<char> resourceName, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out DocumentPath? result, [System.Diagnostics.CodeAnalysis.NotNullWhen(false)] out string? error)
     {
         result = null;
 
-        var lastSlash = resourceName.LastIndexOf('/');
+        var lastSlash = resourceName.Span.LastIndexOf('/');
         if (lastSlash < 0)
         {
             error = "missing '/'";
@@ -66,7 +64,7 @@ public sealed class DocumentPath
         }
 
         var documentId = resourceName[(lastSlash + 1)..];
-        if (documentId.Length == 0 || documentId.AsSpan().IsWhiteSpace())
+        if (documentId.Length == 0 || documentId.Span.IsWhiteSpace())
         {
             error = "empty or whitespace document ID";
             return false;
@@ -74,12 +72,12 @@ public sealed class DocumentPath
 
         // CollectionPath.TryParse validates the prefix and requires an odd segment count —
         // exactly the shape of the collection part of a valid document resource name.
-        if (!CollectionPath.TryParse(resourceName.AsMemory()[..lastSlash], out var collection, out error))
+        if (!CollectionPath.TryParse(resourceName[..lastSlash], out var collection, out error))
         {
             return false;
         }
 
-        result = new DocumentPath(collection, documentId, resourceName);
+        result = new DocumentPath(collection, documentId.ToString(), resourceName.ToString());
         error = null;
         return true;
     }
@@ -90,11 +88,7 @@ public sealed class DocumentPath
     /// </summary>
     public static DocumentPath FromCreateRequest(string parent, string collectionId, string documentId)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(parent);
-        ArgumentException.ThrowIfNullOrWhiteSpace(collectionId);
-        ArgumentException.ThrowIfNullOrWhiteSpace(documentId);
-
-        return Parse($"{parent}/{collectionId}/{documentId}");
+        return Parse($"{parent}/{collectionId}/{documentId}".AsMemory());
     }
 
     /// <summary>

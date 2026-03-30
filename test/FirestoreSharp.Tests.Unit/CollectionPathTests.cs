@@ -84,7 +84,7 @@ public sealed class CollectionPathTests
     {
         var collection = CollectionPath.Parse("projects/p/databases/d/documents/users");
 
-        Assert.True(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/alice"));
+        Assert.True(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/alice".AsMemory()));
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public sealed class CollectionPathTests
     {
         var collection = CollectionPath.Parse("projects/p/databases/d/documents/users");
 
-        Assert.False(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/alice/posts/post1"));
+        Assert.False(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/alice/posts/post1".AsMemory()));
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class CollectionPathTests
     {
         var collection = CollectionPath.Parse("projects/p/databases/d/documents/users");
 
-        Assert.False(collection.IsDirectChildDocument("projects/p/databases/d/documents/orders/o1"));
+        Assert.False(collection.IsDirectChildDocument("projects/p/databases/d/documents/orders/o1".AsMemory()));
     }
 
     [Fact]
@@ -108,7 +108,7 @@ public sealed class CollectionPathTests
     {
         var collection = CollectionPath.Parse("projects/p/databases/d/documents/users/u1/posts");
 
-        Assert.True(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/u1/posts/post1"));
+        Assert.True(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/u1/posts/post1".AsMemory()));
     }
 
     [Fact]
@@ -116,7 +116,7 @@ public sealed class CollectionPathTests
     {
         var collection = CollectionPath.Parse("projects/p/databases/d/documents/users/u1/posts");
 
-        Assert.False(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/u1/posts/post1/comments/c1"));
+        Assert.False(collection.IsDirectChildDocument("projects/p/databases/d/documents/users/u1/posts/post1/comments/c1".AsMemory()));
     }
 
     // ── HasCollectionAfter ───────────────────────────────────────────────────

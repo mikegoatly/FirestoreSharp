@@ -38,10 +38,10 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
         return Task.FromResult(_documents.TryGetValue(path.ResourceName, out var document) ? document.Clone() : null);
     }
 
-    public async IAsyncEnumerable<Document> ListAsync(string parentPrefix, [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    public async IAsyncEnumerable<Document> ListAsync(ReadOnlyMemory<char> parentPrefix, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         var documents = _documents
-            .Where(kvp => kvp.Key.StartsWith(parentPrefix, StringComparison.Ordinal))
+            .Where(kvp => kvp.Key.AsSpan().StartsWith(parentPrefix.Span, StringComparison.Ordinal))
             .OrderBy(kvp => kvp.Key, StringComparer.Ordinal);
 
         foreach (var kvp in documents)

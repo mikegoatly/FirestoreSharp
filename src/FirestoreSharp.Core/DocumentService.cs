@@ -64,7 +64,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
         var effectiveStore = storeOverride ?? store;
         foreach (var resourceName in resourceNames)
         {
-            var path = DocumentPath.Parse(resourceName);
+            var path = DocumentPath.Parse(resourceName.AsMemory());
             var readTime = Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow);
             var document = await effectiveStore.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
@@ -86,7 +86,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
         var documents = new List<Document>();
         string? nextPageToken = null;
 
-        await foreach (var document in store.ListAsync(parentPrefix, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in store.ListAsync(parentPrefix.AsMemory(), cancellationToken).ConfigureAwait(false))
         {
             if (!string.IsNullOrEmpty(pageToken) && string.Compare(document.Name, pageToken, StringComparison.Ordinal) <= 0)
             {
@@ -165,7 +165,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
         var collectionIds = new List<string>();
         string? nextPageToken = null;
 
-        await foreach (var document in store.ListAsync(parentPrefix, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in store.ListAsync(parentPrefix.AsMemory(), cancellationToken).ConfigureAwait(false))
         {
             // Strip the parent prefix to get "collectionId/docId[/...]"
             var remainder = document.Name.AsSpan()[parentPrefix.Length..];
@@ -206,12 +206,12 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
     {
         var effectiveStore = storeOverride ?? store;
         var candidates = new List<Document>();
-        await foreach (var document in effectiveStore.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in effectiveStore.ListAsync(parent.AsMemory(), cancellationToken).ConfigureAwait(false))
         {
             candidates.Add(document);
         }
 
-        var documents = QueryEngine.Execute(parent, query, candidates);
+        var documents = QueryEngine.Execute(parent.AsMemory(), query, candidates);
         LogQuery(parent, documents.Count);
         return documents;
     }
@@ -233,12 +233,12 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
 
         var effectiveStore = storeOverride ?? store;
         var candidates = new List<Document>();
-        await foreach (var document in effectiveStore.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in effectiveStore.ListAsync(parent.AsMemory(), cancellationToken).ConfigureAwait(false))
         {
             candidates.Add(document);
         }
 
-        var documents = QueryEngine.Execute(parent, innerQuery, candidates);
+        var documents = QueryEngine.Execute(parent.AsMemory(), innerQuery, candidates);
         LogQuery(parent, documents.Count);
         var aggregationResult = AggregationEngine.Execute(aggregationQuery, documents);
         return new AggregationQueryResult(aggregationResult, documents);
@@ -274,12 +274,12 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
         });
 
         var candidates = new List<Document>();
-        await foreach (var document in store.ListAsync(parent, cancellationToken).ConfigureAwait(false))
+        await foreach (var document in store.ListAsync(parent.AsMemory(), cancellationToken).ConfigureAwait(false))
         {
             candidates.Add(document);
         }
 
-        var documents = QueryEngine.Execute(parent, partitionQuery, candidates);
+        var documents = QueryEngine.Execute(parent.AsMemory(), partitionQuery, candidates);
         return PartitionEngine.Execute(documents, partitionCount, pageSize, pageToken);
     }
 
@@ -291,7 +291,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
         {
             case Write.OperationOneofCase.Update:
                 {
-                    var path = DocumentPath.Parse(write.Update.Name);
+                    var path = DocumentPath.Parse(write.Update.Name.AsMemory());
                     var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
                     CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
@@ -360,7 +360,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
 
             case Write.OperationOneofCase.Delete:
                 {
-                    var path = DocumentPath.Parse(write.Delete);
+                    var path = DocumentPath.Parse(write.Delete.AsMemory());
                     var existing = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
                     CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
@@ -496,7 +496,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
     {
         foreach (var (resourceName, expectedUpdateTime) in readSet)
         {
-            var path = DocumentPath.Parse(resourceName);
+            var path = DocumentPath.Parse(resourceName.AsMemory());
             var current = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
             var currentUpdateTime = current?.UpdateTime;
@@ -524,7 +524,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
         {
             case Write.OperationOneofCase.Update:
                 {
-                    var path = DocumentPath.Parse(write.Update.Name);
+                    var path = DocumentPath.Parse(write.Update.Name.AsMemory());
                     var existing = await prepareStore.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
                     CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);
@@ -590,7 +590,7 @@ internal sealed partial class DocumentService(IDocumentStore store, IDocumentCha
 
             case Write.OperationOneofCase.Delete:
                 {
-                    var path = DocumentPath.Parse(write.Delete);
+                    var path = DocumentPath.Parse(write.Delete.AsMemory());
                     var existing = await prepareStore.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
                     CheckPrecondition(existing, write.CurrentDocument, path.ResourceName);

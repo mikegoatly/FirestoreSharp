@@ -21,7 +21,7 @@ internal static class QueryEngine
     /// (e.g. <c>projects/p/databases/d/documents</c> or a document path for subcollection queries).
     /// </summary>
     public static IReadOnlyList<Document> Execute(
-        string parent,
+        ReadOnlyMemory<char> parent,
         StructuredQuery query,
         IEnumerable<Document> candidates)
     {
@@ -73,7 +73,7 @@ internal static class QueryEngine
     /// </summary>
     internal static bool MatchesCollection(
         Document document,
-        string parent,
+        ReadOnlyMemory<char> parent,
         IEnumerable<StructuredQuery.Types.CollectionSelector> selectors)
     {
         return selectors.Any(selector => MatchesSelector(document, parent, selector));
@@ -81,14 +81,14 @@ internal static class QueryEngine
 
     private static bool MatchesSelector(
         Document document,
-        string parent,
+        ReadOnlyMemory<char> parent,
         StructuredQuery.Types.CollectionSelector selector)
     {
-        var name = document.Name;
+        var name = document.Name.AsSpan();
 
         if (selector.AllDescendants)
         {
-            if (!name.StartsWith(parent + "/", StringComparison.Ordinal))
+            if (!name.StartsWithSubPath(parent.Span))
             {
                 return false;
             }
@@ -103,7 +103,7 @@ internal static class QueryEngine
             var parentSegmentCount = DatabasePath.IsDatabaseRoot(parent, out _)
                 ? 0
                 : DocumentPath.Parse(parent).Collection.Segments.Count;
-            var docPath = DocumentPath.Parse(name);
+            var docPath = DocumentPath.Parse(document.Name.AsMemory());
             return docPath.Collection.HasCollectionAfter(parentSegmentCount, selector.CollectionId);
         }
         else
@@ -111,19 +111,47 @@ internal static class QueryEngine
             if (string.IsNullOrEmpty(selector.CollectionId))
             {
                 // Any direct child: parent/{anyCollection}/{docId} — exactly 2 more segments
-                var prefix = parent + "/";
-                if (!name.StartsWith(prefix, StringComparison.Ordinal))
+                if (!name.TryGetSubPath(parent.Span, out var remainder))
                 {
                     return false;
                 }
 
-                var remainder = name[prefix.Length..];
-                var slashIdx = remainder.IndexOf('/', StringComparison.Ordinal);
-                return slashIdx > 0 && remainder.IndexOf('/', slashIdx + 1) < 0;
+                var slashIdx = remainder.IndexOf('/');
+                return slashIdx > 0 && remainder[(slashIdx + 1)..].IndexOf('/') < 0;
             }
 
             var targetCollection = CollectionPath.Parse($"{parent}/{selector.CollectionId}");
-            return targetCollection.IsDirectChildDocument(name);
+            return targetCollection.IsDirectChildDocument(document.Name.AsMemory());
         }
+    }
+}
+
+internal static class SpanExtensions
+{
+    public static bool IsEmptyOrWhitespace(this ReadOnlySpan<char> span)
+    {
+        return span.IsEmpty || span.IsWhiteSpace();
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> if <paramref name="span"/> starts with <paramref name="prefix"/> followed by a path segment boundary '/'.
+    /// </summary>
+    public static bool StartsWithSubPath(this ReadOnlySpan<char> span, ReadOnlySpan<char> prefix)
+    {
+        return span.Length > prefix.Length
+            && span.StartsWith(prefix, StringComparison.Ordinal)
+            && span[prefix.Length] == '/';
+    }
+
+    public static bool TryGetSubPath(this ReadOnlySpan<char> span, ReadOnlySpan<char> prefix, out ReadOnlySpan<char> subPath)
+    {
+        if (span.StartsWithSubPath(prefix))
+        {
+            subPath = span[(prefix.Length + 1)..];
+            return true;
+        }
+
+        subPath = default;
+        return false;
     }
 }

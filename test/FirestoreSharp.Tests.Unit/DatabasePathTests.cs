@@ -10,7 +10,7 @@ public sealed class DatabasePathTests
     [Fact]
     public void Parse_ExtractsProjectAndDatabase()
     {
-        var path = DatabasePath.Parse("projects/my-proj/databases/(default)");
+        var path = DatabasePath.Parse("projects/my-proj/databases/(default)".AsMemory());
 
         Assert.Equal("my-proj", path.Project);
         Assert.Equal("(default)", path.Database);
@@ -19,7 +19,7 @@ public sealed class DatabasePathTests
     [Fact]
     public void Parse_CustomDatabase_ExtractsComponents()
     {
-        var path = DatabasePath.Parse("projects/p1/databases/my-db");
+        var path = DatabasePath.Parse("projects/p1/databases/my-db".AsMemory());
 
         Assert.Equal("p1", path.Project);
         Assert.Equal("my-db", path.Database);
@@ -29,7 +29,7 @@ public sealed class DatabasePathTests
     public void ResourceName_RoundTrips()
     {
         const string name = "projects/p1/databases/(default)";
-        var path = DatabasePath.Parse(name);
+        var path = DatabasePath.Parse(name.AsMemory());
 
         Assert.Equal(name, path.ResourceName.ToString());
     }
@@ -38,7 +38,7 @@ public sealed class DatabasePathTests
     public void ToString_ReturnsResourceName()
     {
         const string name = "projects/p1/databases/(default)";
-        var path = DatabasePath.Parse(name);
+        var path = DatabasePath.Parse(name.AsMemory());
 
         Assert.Equal(name, path.ToString());
     }
@@ -46,7 +46,7 @@ public sealed class DatabasePathTests
     [Fact]
     public void DocumentsRoot_AppendsDocumentsSegment()
     {
-        var path = DatabasePath.Parse("projects/p1/databases/(default)");
+        var path = DatabasePath.Parse("projects/p1/databases/(default)".AsMemory());
 
         Assert.Equal("projects/p1/databases/(default)/documents", path.DocumentsRoot);
     }
@@ -62,14 +62,14 @@ public sealed class DatabasePathTests
     [InlineData("projects/p1/databases/")]           // empty database
     public void Parse_InvalidPath_Throws(string input)
     {
-        Assert.ThrowsAny<ArgumentException>(() => DatabasePath.Parse(input));
+        Assert.ThrowsAny<ArgumentException>(() => DatabasePath.Parse(input.AsMemory()));
     }
 
     [Fact]
     public void Parse_WrongPrefix_Throws()
     {
         Assert.Throws<ArgumentException>(() =>
-            DatabasePath.Parse("buckets/b1/databases/db"));
+            DatabasePath.Parse("buckets/b1/databases/db".AsMemory()));
     }
 
     // ── Equality ─────────────────────────────────────────────────────────────
@@ -77,8 +77,8 @@ public sealed class DatabasePathTests
     [Fact]
     public void Equals_SameResourceName_ReturnsTrue()
     {
-        var a = DatabasePath.Parse("projects/p1/databases/(default)");
-        var b = DatabasePath.Parse("projects/p1/databases/(default)");
+        var a = DatabasePath.Parse("projects/p1/databases/(default)".AsMemory());
+        var b = DatabasePath.Parse("projects/p1/databases/(default)".AsMemory());
 
         Assert.Equal(a, b);
     }
@@ -86,8 +86,8 @@ public sealed class DatabasePathTests
     [Fact]
     public void Equals_DifferentResourceName_ReturnsFalse()
     {
-        var a = DatabasePath.Parse("projects/p1/databases/(default)");
-        var b = DatabasePath.Parse("projects/p2/databases/(default)");
+        var a = DatabasePath.Parse("projects/p1/databases/(default)".AsMemory());
+        var b = DatabasePath.Parse("projects/p2/databases/(default)".AsMemory());
 
         Assert.NotEqual(a, b);
     }
@@ -97,7 +97,7 @@ public sealed class DatabasePathTests
     [Fact]
     public void IsDatabaseRoot_DatabaseRootPath_ReturnsTrueWithParsedPath()
     {
-        var result = DatabasePath.IsDatabaseRoot("projects/p1/databases/(default)/documents", out var db);
+        var result = DatabasePath.IsDatabaseRoot("projects/p1/databases/(default)/documents".AsMemory(), out var db);
 
         Assert.True(result);
         Assert.Equal("p1", db.Project);
@@ -107,19 +107,19 @@ public sealed class DatabasePathTests
     [Fact]
     public void IsDatabaseRoot_CollectionPath_ReturnsFalse()
     {
-        Assert.False(DatabasePath.IsDatabaseRoot("projects/p1/databases/(default)/documents/users", out _));
+        Assert.False(DatabasePath.IsDatabaseRoot("projects/p1/databases/(default)/documents/users".AsMemory(), out _));
     }
 
     [Fact]
     public void IsDatabaseRoot_DocumentPath_ReturnsFalse()
     {
-        Assert.False(DatabasePath.IsDatabaseRoot("projects/p1/databases/(default)/documents/users/u1", out _));
+        Assert.False(DatabasePath.IsDatabaseRoot("projects/p1/databases/(default)/documents/users/u1".AsMemory(), out _));
     }
 
     [Fact]
     public void IsDatabaseRoot_MalformedPath_ReturnsFalse()
     {
-        Assert.False(DatabasePath.IsDatabaseRoot("not/a/valid/path/documents", out _));
+        Assert.False(DatabasePath.IsDatabaseRoot("not/a/valid/path/documents".AsMemory(), out _));
     }
 
     // ── CollectionPath integration ────────────────────────────────────────────

@@ -119,7 +119,7 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
     {
         foreach (var resourceName in target.DocumentNames)
         {
-            var path = DocumentPath.Parse(resourceName);
+            var path = DocumentPath.Parse(resourceName.AsMemory());
             var doc = await store.TryGetAsync(path, cancellationToken).ConfigureAwait(false);
 
             if (doc is not null)
@@ -133,12 +133,12 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
     private async Task SendQueryTargetSnapshotAsync(QueryListenerTarget target, CancellationToken cancellationToken)
     {
         var candidates = new List<Document>();
-        await foreach (var doc in store.ListAsync(target.Parent, cancellationToken).ConfigureAwait(false))
+        await foreach (var doc in store.ListAsync(target.Parent.AsMemory(), cancellationToken).ConfigureAwait(false))
         {
             candidates.Add(doc);
         }
 
-        var results = QueryEngine.Execute(target.Parent, target.Query, candidates);
+        var results = QueryEngine.Execute(target.Parent.AsMemory(), target.Query, candidates);
 
         foreach (var doc in results)
         {
@@ -237,7 +237,7 @@ internal sealed class ListenerConnection(IDocumentStore store, Action onDisposed
     {
         // Check collection membership first.
         var fromCollections = target.Query.From;
-        if (fromCollections.Count > 0 && !QueryEngine.MatchesCollection(document, target.Parent, fromCollections))
+        if (fromCollections.Count > 0 && !QueryEngine.MatchesCollection(document, target.Parent.AsMemory(), fromCollections))
         {
             return false;
         }

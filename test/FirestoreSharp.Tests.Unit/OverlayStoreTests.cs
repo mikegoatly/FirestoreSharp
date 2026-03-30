@@ -242,7 +242,7 @@ public sealed class OverlayStoreTests
         // doc3 is overlay-only (created in transaction, not yet in base)
         await overlay.CreateAsync(MakePath("doc3"), MakeDocument("doc3", "overlay3"), ct);
 
-        var results = await overlay.ListAsync(prefix, ct).ToListAsync();
+        var results = await overlay.ListAsync(prefix.AsMemory(), ct).ToListAsync();
 
         Assert.Equal(3, results.Count);
         Assert.Contains(results, d => d.Fields["v"].StringValue == "base1");
@@ -261,7 +261,7 @@ public sealed class OverlayStoreTests
         await baseStore.CreateAsync(path, MakeDocument("doc1", "original"), ct);
         await overlay.UpdateAsync(path, MakeDocument("doc1", "updated"), ct);
 
-        var results = await overlay.ListAsync(prefix, ct).ToListAsync();
+        var results = await overlay.ListAsync(prefix.AsMemory(), ct).ToListAsync();
 
         Assert.Single(results);
         Assert.Equal("updated", results[0].Fields["v"].StringValue);
@@ -278,7 +278,7 @@ public sealed class OverlayStoreTests
         await baseStore.CreateAsync(MakePath("doc2"), MakeDocument("doc2", "delete-me"), ct);
         await overlay.DeleteAsync(MakePath("doc2"), ct);
 
-        var results = await overlay.ListAsync(prefix, ct).ToListAsync();
+        var results = await overlay.ListAsync(prefix.AsMemory(), ct).ToListAsync();
 
         Assert.Single(results);
         Assert.Equal("keep", results[0].Fields["v"].StringValue);
@@ -298,7 +298,7 @@ public sealed class OverlayStoreTests
         // Promote doc1 by reading it — should not cause it to appear twice in ListAsync
         await overlay.GetAsync(MakePath("doc1"), ct);
 
-        var results = await overlay.ListAsync(prefix, ct).ToListAsync();
+        var results = await overlay.ListAsync(prefix.AsMemory(), ct).ToListAsync();
 
         Assert.Single(results);
         Assert.Equal("base", results[0].Fields["v"].StringValue);
@@ -318,7 +318,7 @@ public sealed class OverlayStoreTests
         await overlay.GetAsync(path, ct);
         await overlay.UpdateAsync(path, MakeDocument("doc1", "written"), ct);
 
-        var results = await overlay.ListAsync(prefix, ct).ToListAsync();
+        var results = await overlay.ListAsync(prefix.AsMemory(), ct).ToListAsync();
 
         Assert.Single(results);
         Assert.Equal("written", results[0].Fields["v"].StringValue);

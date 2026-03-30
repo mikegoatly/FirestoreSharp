@@ -133,12 +133,10 @@ public sealed class CollectionPath
     /// Returns <c>true</c> if <paramref name="documentName"/> is a direct child of this collection —
     /// i.e. it starts with this collection's resource name followed by exactly one additional path segment (the document ID).
     /// </summary>
-    public bool IsDirectChildDocument(string documentName)
+    public bool IsDirectChildDocument(ReadOnlyMemory<char> documentName)
     {
-        ArgumentNullException.ThrowIfNull(documentName);
-
         var rn = ResourceName.Span;
-        var dn = documentName.AsSpan();
+        var dn = documentName.Span;
 
         if (dn.Length <= rn.Length || dn[rn.Length] != '/' || !dn[..rn.Length].Equals(rn, StringComparison.Ordinal))
         {

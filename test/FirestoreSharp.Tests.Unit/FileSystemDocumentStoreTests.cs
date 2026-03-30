@@ -273,7 +273,7 @@ public sealed class FileSystemDocumentStoreTests : IDisposable
 
         var databaseRoot = "projects/test-project/databases/(default)/documents";
         var results = new List<string>();
-        await foreach (var doc in store.ListAsync(databaseRoot, TestContext.Current.CancellationToken))
+        await foreach (var doc in store.ListAsync(databaseRoot.AsMemory(), TestContext.Current.CancellationToken))
         {
             results.Add(doc.Name);
         }
@@ -281,5 +281,28 @@ public sealed class FileSystemDocumentStoreTests : IDisposable
         Assert.Contains(b1.ExpectedName, results);
         Assert.Contains(b2.ExpectedName, results);
         Assert.Contains(b3.ExpectedName, results);
+    }
+
+    [Fact]
+    public async Task ListAsync_DatabaseRootWithTrailingSlash_ReturnsAllDocuments()
+    {
+        // Callers like ListCollectionIdsAsync append a trailing '/' for string prefix-matching;
+        // verify this doesn't cause a parse failure when the path is the database root.
+        var store = CreateStore();
+        var b1 = new DocumentBuilder().WithCollection("users").WithId("u1");
+        var b2 = new DocumentBuilder().WithCollection("orders").WithId("o1");
+
+        await store.CreateAsync(b1.BuildPath(), b1.Build(), TestContext.Current.CancellationToken);
+        await store.CreateAsync(b2.BuildPath(), b2.Build(), TestContext.Current.CancellationToken);
+
+        var databaseRootWithSlash = "projects/test-project/databases/(default)/documents/";
+        var results = new List<string>();
+        await foreach (var doc in store.ListAsync(databaseRootWithSlash.AsMemory(), TestContext.Current.CancellationToken))
+        {
+            results.Add(doc.Name);
+        }
+
+        Assert.Contains(b1.ExpectedName, results);
+        Assert.Contains(b2.ExpectedName, results);
     }
 }

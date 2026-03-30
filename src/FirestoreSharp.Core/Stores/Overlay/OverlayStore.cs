@@ -69,7 +69,7 @@ internal sealed class OverlayStore(IDocumentStore baseStore) : IDocumentStore
     }
 
     public async IAsyncEnumerable<Document> ListAsync(
-        string parentPrefix,
+        ReadOnlyMemory<char> parentPrefix,
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         // Collect base documents, applying overlay on top.
@@ -98,7 +98,7 @@ internal sealed class OverlayStore(IDocumentStore baseStore) : IDocumentStore
         foreach (var (resourceName, entry) in _overlay)
         {
             if (!seen.Contains(resourceName)
-                && resourceName.StartsWith(parentPrefix, StringComparison.Ordinal)
+                && resourceName.AsSpan().StartsWith(parentPrefix.Span, StringComparison.Ordinal)
                 && !entry.IsDeleted
                 && entry.IsDirty)
             {

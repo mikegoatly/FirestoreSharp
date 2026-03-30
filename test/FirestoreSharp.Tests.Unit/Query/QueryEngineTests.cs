@@ -10,7 +10,7 @@ namespace FirestoreSharp.Tests.Unit.Query;
 
 public sealed class QueryEngineTests
 {
-    private const string Parent = "projects/test-project/databases/(default)/documents";
+    private static readonly ReadOnlyMemory<char> Parent = "projects/test-project/databases/(default)/documents".AsMemory();
     private const string Database = "projects/test-project/databases/(default)";
 
     // ── Collection resolution (from) ──────────────────────────────────────
