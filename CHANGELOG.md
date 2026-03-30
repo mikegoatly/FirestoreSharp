@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.1.2...firestoresharp-v0.2.0) (2026-03-30)
+
+
+### Features
+
+* Allow selection of project/database ([dced2dd](https://github.com/mikegoatly/FirestoreSharp/commit/dced2ddecbab0311d354ce48e36255d87576e73d))
+
 ## [0.1.2](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.1.1...firestoresharp-v0.1.2) (2026-03-30)
 
 
