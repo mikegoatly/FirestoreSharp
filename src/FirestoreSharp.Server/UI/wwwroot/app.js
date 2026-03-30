@@ -1,95 +1,41 @@
 // FirestoreSharp Emulator UI
 // Vanilla JS, no dependencies.
 
-import { state, docsBase, currentParent } from '/ui/state.js';
+import { state } from '/ui/state.js';
 import { API, apiFetch, esc } from '/ui/api.js';
+import {
+  loadCollections, renderCollections, selectCollection,
+  loadDocuments, clearDocuments, openDocument,
+  showNewCollectionModal, hideNewCollectionModal, confirmNewCollection,
+  setCallbacks, setEditorCallbacks,
+} from '/ui/collections.js';
+import {
+  showEditorView, enterEditMode, showCreateMode, closeEditor,
+  saveDocument, deleteDocument, cancelEdit,
+  setLoadDocuments,
+} from '/ui/editor.js';
+import { initSelector, updateSelectorState, setResetNavigation } from '/ui/selector.js';
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 
 const $ = id => document.getElementById(id);
 
 const els = {
-  metaProject: $('meta-project'),
-  metaDatabase: $('meta-database'),
-  metaProjectSelect: $('meta-project-select'),
-  metaDatabaseSelect: $('meta-database-select'),
-  breadcrumb: $('breadcrumb'),
-
-  collectionsList: $('collections-list'),
-  btnNewCollection: $('btn-new-collection'),
-
-  documentsPanel: $('documents-panel'),
-  documentsPanelTitle: $('documents-panel-title'),
-  documentsList: $('documents-list'),
-  btnNewDocument: $('btn-new-document'),
-
-  editorPanel: $('editor-panel'),
-  editorTitle: $('editor-title'),
-  editorView: $('editor-view'),
-  editorEdit: $('editor-edit'),
-  editorTextarea: $('editor-textarea'),
-  editorError: $('editor-error'),
-  btnEditDoc: $('btn-edit-doc'),
-  btnDeleteDoc: $('btn-delete-doc'),
-  btnSaveDoc: $('btn-save-doc'),
-  btnCancelEdit: $('btn-cancel-edit'),
-  btnCloseEditor: $('btn-close-editor'),
-
-  modalNewCollection: $('modal-new-collection'),
-  newCollectionId: $('new-collection-id'),
-  newCollectionError: $('new-collection-error'),
-  btnCancelCollection: $('btn-cancel-collection'),
+  breadcrumb:           $('breadcrumb'),
+  btnNewCollection:     $('btn-new-collection'),
+  btnNewDocument:       $('btn-new-document'),
+  btnEditDoc:           $('btn-edit-doc'),
+  btnDeleteDoc:         $('btn-delete-doc'),
+  btnSaveDoc:           $('btn-save-doc'),
+  btnCancelEdit:        $('btn-cancel-edit'),
+  btnCloseEditor:       $('btn-close-editor'),
+  btnCancelCollection:  $('btn-cancel-collection'),
   btnConfirmCollection: $('btn-confirm-collection'),
+  newCollectionId:      $('new-collection-id'),
+  modalNewCollection:   $('modal-new-collection'),
+  metaProject:          $('meta-project'),
+  metaDatabase:         $('meta-database'),
 };
-
-// ── Value rendering ────────────────────────────────────────────────────────
-
-function renderValue(uiVal, depth = 0) {
-  if (!uiVal) return '<span class="val val-null">null</span>';
-  const { type, value } = uiVal;
-  switch (type) {
-    case 'null':
-      return '<span class="val val-null">null</span>';
-    case 'bool':
-      return `<span class="val val-bool">${value}</span>`;
-    case 'int':
-      return `<span class="val val-int">${esc(value)}</span>`;
-    case 'double':
-      return `<span class="val val-double">${esc(value)}</span>`;
-    case 'string':
-      return `<span class="val val-string">"${esc(value)}"</span>`;
-    case 'timestamp':
-      return `<span class="val val-timestamp">${esc(value)}</span>`;
-    case 'bytes':
-      return `<span class="val val-bytes">bytes(${esc(value).slice(0, 20)}…)</span>`;
-    case 'reference':
-      return `<span class="val val-reference">${esc(value)}</span>`;
-    case 'geopoint': {
-      const g = value || {};
-      return `<span class="val val-geopoint">LatLng(${g.latitude ?? '?'}, ${g.longitude ?? '?'})</span>`;
-    }
-    case 'array': {
-      const items = Array.isArray(value) ? value : [];
-      if (depth > 1 || items.length === 0)
-        return `<span class="val val-array">[${items.length} items]</span>`;
-      const inner = items.slice(0, 5).map(v => renderValue(v, depth + 1)).join(', ');
-      const more = items.length > 5 ? `, …+${items.length - 5}` : '';
-      return `<span class="val val-array">[${inner}${more}]</span>`;
-    }
-    case 'map': {
-      const keys = value ? Object.keys(value) : [];
-      if (depth > 1 || keys.length === 0)
-        return `<span class="val val-map">{${keys.length} keys}</span>`;
-      const inner = keys.slice(0, 3).map(k =>
-        `<span class="field-key">${esc(k)}</span> ${renderValue(value[k], depth + 1)}`
-      ).join(', ');
-      const more = keys.length > 3 ? `, …+${keys.length - 3}` : '';
-      return `<span class="val val-map">{${inner}${more}}</span>`;
-    }
-    default:
-      return `<span class="val">${esc(JSON.stringify(value))}</span>`;
-  }
-}
 
 // ── Breadcrumb ─────────────────────────────────────────────────────────────
 
@@ -106,7 +52,6 @@ function renderBreadcrumb() {
     el.addEventListener('click', () => {
       const idx = parseInt(el.dataset.index, 10);
       if (idx === -1) {
-        // Go to root
         state.navStack = [];
         state.activeCollection = null;
         state.activeDocument = null;
@@ -115,7 +60,6 @@ function renderBreadcrumb() {
         loadCollections();
         clearDocuments();
       } else {
-        // Trim stack to this index
         const item = state.navStack[idx];
         state.navStack = state.navStack.slice(0, idx + 1);
         state.activeDocument = null;
@@ -123,11 +67,9 @@ function renderBreadcrumb() {
         renderBreadcrumb();
 
         if (item.type === 'document') {
-          // Reload collections for this document's subcollections
           loadCollections();
           clearDocuments();
         } else {
-          // Collection — reload its documents
           loadCollections();
           state.activeCollection = item.id;
           loadDocuments(item.id);
@@ -137,480 +79,31 @@ function renderBreadcrumb() {
   });
 }
 
-// ── Collections panel ──────────────────────────────────────────────────────
+// ── Navigation reset (used by selector) ───────────────────────────────────
 
-async function loadCollections(pageToken = null) {
-  const parent = currentParent();
-  try {
-    const params = new URLSearchParams({ parent });
-    if (pageToken) params.set('pageToken', pageToken);
-    const data = await apiFetch(`${API}/collections?${params}`);
-
-    if (pageToken) {
-      // Append
-      const existing = els.collectionsList.querySelector('.collection-items');
-      if (existing) renderCollectionItems(data, existing, true);
-    } else {
-      renderCollections(data);
-    }
-  } catch (e) {
-    els.collectionsList.innerHTML = `<div class="empty-state" style="color:var(--danger)">${esc(e.message)}</div>`;
-  }
-}
-
-function renderCollections(data) {
-  if (!data.collectionIds || data.collectionIds.length === 0) {
-    els.collectionsList.innerHTML = '<div class="empty-state">No collections yet.</div>';
-    state.collPageToken = null;
-    return;
-  }
-
-  const container = document.createElement('div');
-  container.className = 'collection-items';
-  els.collectionsList.innerHTML = '';
-  els.collectionsList.appendChild(container);
-  renderCollectionItems(data, container, false);
-}
-
-function renderCollectionItems(data, container, append) {
-  if (!append) container.innerHTML = '';
-
-  data.collectionIds.forEach(id => {
-    const el = document.createElement('div');
-    el.className = 'collection-item';
-    if (id === state.activeCollection) el.classList.add('active');
-    el.innerHTML = `<span class="coll-icon">◉</span><span class="coll-name">${esc(id)}</span>`;
-    el.addEventListener('click', () => selectCollection(id));
-    container.appendChild(el);
-  });
-
-  // Remove existing load-more
-  const existing = els.collectionsList.querySelector('.load-more');
-  if (existing) existing.remove();
-
-  if (data.nextPageToken) {
-    state.collPageToken = data.nextPageToken;
-    const more = document.createElement('div');
-    more.className = 'load-more';
-    more.innerHTML = `<button class="btn-load-more">Load more collections</button>`;
-    more.querySelector('button').addEventListener('click', () => loadCollections(state.collPageToken));
-    els.collectionsList.appendChild(more);
-  } else {
-    state.collPageToken = null;
-  }
-}
-
-function selectCollection(collectionId) {
-  state.activeCollection = collectionId;
+function resetNavigation() {
+  state.navStack = [];
+  state.activeCollection = null;
   state.activeDocument = null;
-
-  // Update active state in collections panel
-  els.collectionsList.querySelectorAll('.collection-item').forEach(el => {
-    el.classList.toggle('active', el.querySelector('.coll-name')?.textContent === collectionId);
-  });
-
-  // Push to nav stack if not already last item
-  const last = state.navStack[state.navStack.length - 1];
-  if (!last || last.type !== 'collection' || last.id !== collectionId) {
-    // Remove any trailing document from stack and add this collection
-    if (last && last.type === 'document') {
-      state.navStack.pop();
-    }
-    const parent = currentParent();
-    state.navStack.push({
-      type: 'collection',
-      id: collectionId,
-      resourceName: `${parent}/${collectionId}`  // not a valid resource name but used for sub-collection parent
-    });
-    // Recalculate — the collection's "parent" for documents is the current parent before push
-    state.navStack[state.navStack.length - 1].parentForDocs = parent;
-  }
-
-  renderBreadcrumb();
   closeEditor();
-  loadDocuments(collectionId);
+  renderBreadcrumb();
+  loadCollections();
+  clearDocuments();
 }
 
-// ── Documents panel ────────────────────────────────────────────────────────
+// ── Wire up cross-module callbacks ─────────────────────────────────────────
 
-function clearDocuments() {
-  els.documentsPanelTitle.textContent = 'Select a collection';
-  els.documentsList.innerHTML = '<div class="empty-state">Select a collection to view documents.</div>';
-  els.btnNewDocument.classList.add('hidden');
-  state.docPageToken = null;
-}
-
-async function loadDocuments(collectionId, pageToken = null) {
-  // The parent for listing documents is the nav stack BEFORE the collection entry
-  const collEntry = state.navStack[state.navStack.length - 1];
-  const parent = collEntry?.parentForDocs ?? docsBase();
-
-  els.documentsPanelTitle.textContent = collectionId;
-  els.btnNewDocument.classList.remove('hidden');
-
-  if (!pageToken) {
-    els.documentsList.innerHTML = '<div class="empty-state">Loading…</div>';
-  }
-
-  try {
-    const params = new URLSearchParams({ parent, collectionId });
-    if (pageToken) params.set('pageToken', pageToken);
-    const data = await apiFetch(`${API}/documents?${params}`);
-
-    if (pageToken) {
-      const existing = els.documentsList.querySelector('.document-items');
-      if (existing) renderDocumentItems(data, collectionId, existing, true);
-    } else {
-      renderDocuments(data, collectionId);
-    }
-  } catch (e) {
-    els.documentsList.innerHTML = `<div class="empty-state" style="color:var(--danger)">${esc(e.message)}</div>`;
-  }
-}
-
-function renderDocuments(data, collectionId) {
-  if (!data.documents || data.documents.length === 0) {
-    els.documentsList.innerHTML = '<div class="empty-state">No documents in this collection.</div>';
-    state.docPageToken = null;
-    return;
-  }
-
-  const container = document.createElement('div');
-  container.className = 'document-items';
-  els.documentsList.innerHTML = '';
-  els.documentsList.appendChild(container);
-  renderDocumentItems(data, collectionId, container, false);
-}
-
-function renderDocumentItems(data, collectionId, container, append) {
-  if (!append) container.innerHTML = '';
-
-  data.documents.forEach(doc => {
-    const el = document.createElement('div');
-    el.className = 'document-item';
-    if (doc.resourceName === state.activeDocument) el.classList.add('active');
-
-    const fieldKeys = Object.keys(doc.fields || {});
-    const previewFields = fieldKeys.slice(0, 3).map(k =>
-      `<div class="doc-field"><span class="field-key">${esc(k)}</span>${renderValue(doc.fields[k])}</div>`
-    ).join('');
-    const more = fieldKeys.length > 3 ? `<div class="doc-field" style="color:var(--text-muted)">+${fieldKeys.length - 3} more fields</div>` : '';
-
-    el.innerHTML = `
-      <div class="doc-id" title="${esc(doc.resourceName)}">${esc(doc.documentId)}</div>
-      <div class="doc-preview">${previewFields}${more}</div>
-    `;
-
-    el.addEventListener('click', () => openDocument(doc.resourceName, collectionId));
-    container.appendChild(el);
-  });
-
-  // Remove existing load-more
-  const existing = els.documentsList.querySelector('.load-more');
-  if (existing) existing.remove();
-
-  if (data.nextPageToken) {
-    state.docPageToken = data.nextPageToken;
-    const more = document.createElement('div');
-    more.className = 'load-more';
-    more.innerHTML = `<button class="btn-load-more">Load more documents</button>`;
-    more.querySelector('button').addEventListener('click', () => loadDocuments(collectionId, state.docPageToken));
-    els.documentsList.appendChild(more);
-  } else {
-    state.docPageToken = null;
-  }
-}
-
-// ── Document editor ────────────────────────────────────────────────────────
-
-async function openDocument(resourceName, collectionId) {
-  state.activeDocument = resourceName;
-
-  // Mark active in list
-  els.documentsList.querySelectorAll('.document-item').forEach(el => {
-    const docId = el.querySelector('.doc-id');
-    // Match by checking the title attribute on doc-id
-    el.classList.toggle('active', el.querySelector('.doc-id')?.title === resourceName);
-  });
-
-  try {
-    const data = await apiFetch(`${API}/document?resourceName=${encodeURIComponent(resourceName)}`);
-    showEditorView(data);
-
-    // Push document to nav stack and load its subcollections
-    const collEntry = state.navStack[state.navStack.length - 1];
-    if (!collEntry || collEntry.type !== 'document' || collEntry.id !== data.documentId) {
-      // Remove trailing collection entry if it matches current, then add document
-      if (collEntry && collEntry.type === 'collection') {
-        // keep collection in stack — document goes after
-      }
-      // Remove any previous document entry
-      if (state.navStack[state.navStack.length - 1]?.type === 'document') {
-        state.navStack.pop();
-      }
-      state.navStack.push({
-        type: 'document',
-        id: data.documentId,
-        resourceName: resourceName,
-        parentForDocs: resourceName,  // subcollections are listed under document resourceName
-      });
-    }
-
-    renderBreadcrumb();
-
-    // Load subcollections for this document
-    loadSubcollections(resourceName);
-  } catch (e) {
-    showEditorError(e.message);
-  }
-}
-
-async function loadSubcollections(docResourceName) {
-  try {
-    const params = new URLSearchParams({ parent: docResourceName });
-    const data = await apiFetch(`${API}/collections?${params}`);
-    renderCollections(data);
-  } catch {
-    // Ignore subcollection load errors silently
-  }
-}
-
-function showEditorView(doc) {
-  state.editorMode = 'view';
-  els.editorPanel.classList.remove('hidden');
-  els.editorTitle.textContent = doc.documentId;
-
-  // Buttons
-  els.btnEditDoc.classList.remove('hidden');
-  els.btnDeleteDoc.classList.remove('hidden');
-  els.btnSaveDoc.classList.add('hidden');
-  els.btnCancelEdit.classList.add('hidden');
-
-  // View mode
-  els.editorView.classList.remove('hidden');
-  els.editorEdit.classList.add('hidden');
-
-  // Render metadata
-  const fields = doc.fields || {};
-  const fieldKeys = Object.keys(fields);
-
-  let html = `<div class="doc-meta">
-    <div>Created: ${doc.createTime ? new Date(doc.createTime).toLocaleString() : '—'}</div>
-    <div>Updated: ${doc.updateTime ? new Date(doc.updateTime).toLocaleString() : '—'}</div>
-    <div style="margin-top:4px;word-break:break-all;color:var(--text-muted);font-size:11px">${esc(doc.resourceName)}</div>
-  </div>`;
-
-  if (fieldKeys.length === 0) {
-    html += '<div class="empty-state">No fields.</div>';
-  } else {
-    fieldKeys.forEach(k => {
-      html += `<div class="editor-field">
-        <div class="editor-field-key">${esc(k)}</div>
-        <div class="editor-field-value">${renderValue(fields[k])}</div>
-      </div>`;
-    });
-  }
-
-  els.editorView.innerHTML = html;
-
-  // Store doc on element for edit mode
-  els.editorPanel.dataset.doc = JSON.stringify(doc);
-}
-
-function enterEditMode() {
-  const doc = JSON.parse(els.editorPanel.dataset.doc || '{}');
-  state.editorMode = 'edit';
-
-  els.editorView.classList.add('hidden');
-  els.editorEdit.classList.remove('hidden');
-  els.btnEditDoc.classList.add('hidden');
-  els.btnDeleteDoc.classList.add('hidden');
-  els.btnSaveDoc.classList.remove('hidden');
-  els.btnCancelEdit.classList.remove('hidden');
-
-  // Populate textarea with current fields
-  els.editorTextarea.value = JSON.stringify(doc.fields || {}, null, 2);
-  hideEditorError();
-  els.editorTextarea.focus();
-}
-
-function showCreateMode(collectionId) {
-  state.editorMode = 'create';
-  state.activeDocument = null;
-
-  // Deselect document in list
-  els.documentsList.querySelectorAll('.document-item').forEach(el => el.classList.remove('active'));
-
-  els.editorPanel.classList.remove('hidden');
-  els.editorTitle.textContent = 'New document';
-  els.editorView.classList.add('hidden');
-  els.editorEdit.classList.remove('hidden');
-
-  els.btnEditDoc.classList.add('hidden');
-  els.btnDeleteDoc.classList.add('hidden');
-  els.btnSaveDoc.classList.remove('hidden');
-  els.btnCancelEdit.classList.remove('hidden');
-
-  // Store creation context
-  els.editorPanel.dataset.createCollection = collectionId;
-  els.editorPanel.dataset.doc = '';
-
-  els.editorTextarea.value = JSON.stringify({
-    fieldName: { type: 'string', value: 'example' }
-  }, null, 2);
-  hideEditorError();
-  els.editorTextarea.focus();
-}
-
-function closeEditor() {
-  els.editorPanel.classList.add('hidden');
-  state.editorMode = null;
-  state.activeDocument = null;
-  els.documentsList.querySelectorAll('.document-item').forEach(el => el.classList.remove('active'));
-}
-
-async function saveDocument() {
-  let fields;
-  try {
-    fields = JSON.parse(els.editorTextarea.value);
-  } catch (e) {
-    showEditorError('Invalid JSON: ' + e.message);
-    return;
-  }
-
-  if (typeof fields !== 'object' || Array.isArray(fields)) {
-    showEditorError('Fields must be a JSON object.');
-    return;
-  }
-
-  try {
-    if (state.editorMode === 'create') {
-      const collectionId = els.editorPanel.dataset.createCollection;
-      const collEntry = state.navStack.find(n => n.type === 'collection' && n.id === collectionId);
-      const parent = collEntry?.parentForDocs ?? docsBase();
-
-      const body = JSON.stringify({ documentId: null, fields });
-      const data = await apiFetch(
-        `${API}/document?parent=${encodeURIComponent(parent)}&collectionId=${encodeURIComponent(collectionId)}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }
-      );
-      showEditorView(data);
-      state.activeDocument = data.resourceName;
-      loadDocuments(collectionId);
-    } else {
-      const resourceName = state.activeDocument;
-      const body = JSON.stringify({ fields, updateMask: null });
-      const data = await apiFetch(
-        `${API}/document?resourceName=${encodeURIComponent(resourceName)}`,
-        { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body }
-      );
-      showEditorView(data);
-      // Refresh the document list entry
-      const collEntry = state.navStack.find(n => n.type === 'collection');
-      if (collEntry) loadDocuments(collEntry.id);
-    }
-  } catch (e) {
-    showEditorError(e.message);
-  }
-}
-
-async function deleteDocument() {
-  const resourceName = state.activeDocument;
-  if (!resourceName) return;
-  if (!confirm(`Delete document "${resourceName.split('/').pop()}"? This cannot be undone.`)) return;
-
-  try {
-    await apiFetch(`${API}/document?resourceName=${encodeURIComponent(resourceName)}`, { method: 'DELETE' });
-
-    // Remove from nav stack if it's the last entry
-    if (state.navStack[state.navStack.length - 1]?.resourceName === resourceName) {
-      state.navStack.pop();
-    }
-
-    closeEditor();
-    renderBreadcrumb();
-
-    // Reload document list and collections (in case subcollections changed)
-    const collEntry = state.navStack[state.navStack.length - 1];
-    if (collEntry && collEntry.type === 'collection') {
-      loadDocuments(collEntry.id);
-      loadCollections();
-    } else {
-      loadCollections();
-      clearDocuments();
-    }
-  } catch (e) {
-    alert('Delete failed: ' + e.message);
-  }
-}
-
-function cancelEdit() {
-  if (state.editorMode === 'create') {
-    closeEditor();
-  } else {
-    // Back to view mode
-    const doc = JSON.parse(els.editorPanel.dataset.doc || '{}');
-    showEditorView(doc);
-  }
-}
+setCallbacks(closeEditor, renderBreadcrumb, showCreateMode);
+setEditorCallbacks(showEditorView, showEditorError);
+setLoadDocuments(loadDocuments);
+setResetNavigation(resetNavigation);
 
 function showEditorError(msg) {
-  els.editorError.textContent = msg;
-  els.editorError.classList.remove('hidden');
-}
-
-function hideEditorError() {
-  els.editorError.classList.add('hidden');
-}
-
-// ── New collection modal ───────────────────────────────────────────────────
-
-function showNewCollectionModal() {
-  els.newCollectionId.value = '';
-  els.newCollectionError.textContent = '';
-  els.newCollectionError.classList.add('hidden');
-  els.modalNewCollection.classList.remove('hidden');
-  els.newCollectionId.focus();
-}
-
-function hideNewCollectionModal() {
-  els.modalNewCollection.classList.add('hidden');
-}
-
-async function confirmNewCollection() {
-  const id = els.newCollectionId.value.trim();
-  if (!id) {
-    els.newCollectionError.textContent = 'Collection ID cannot be empty.';
-    els.newCollectionError.classList.remove('hidden');
-    return;
-  }
-  if (/[\/.]/.test(id)) {
-    els.newCollectionError.textContent = 'Collection ID cannot contain "/" or ".".';
-    els.newCollectionError.classList.remove('hidden');
-    return;
-  }
-
-  hideNewCollectionModal();
-
-  // Navigate into the new collection and open create-document mode
-  // First push it onto the nav stack
-  const parent = currentParent();
-  state.navStack.push({
-    type: 'collection',
-    id: id,
-    resourceName: `${parent}/${id}`,
-    parentForDocs: parent,
-  });
-  state.activeCollection = id;
-  renderBreadcrumb();
-
-  // Reload collections panel (may be empty) and open create doc
-  renderCollections({ collectionIds: [], nextPageToken: null });
-  els.documentsPanelTitle.textContent = id;
-  els.btnNewDocument.classList.remove('hidden');
-  els.documentsList.innerHTML = '<div class="empty-state">No documents yet. Create the first one.</div>';
-
-  showCreateMode(id);
+  // Thin bridge — editor.js owns its own els, so we re-export this here
+  // for collections.js to call via setEditorCallbacks
+  const el = document.getElementById('editor-error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
 }
 
 // ── Event listeners ────────────────────────────────────────────────────────
@@ -629,7 +122,18 @@ els.btnNewDocument.addEventListener('click', () => {
 });
 
 els.btnEditDoc.addEventListener('click', enterEditMode);
-els.btnDeleteDoc.addEventListener('click', deleteDocument);
+els.btnDeleteDoc.addEventListener('click', () => deleteDocument(() => {
+  closeEditor();
+  renderBreadcrumb();
+  const collEntry = state.navStack[state.navStack.length - 1];
+  if (collEntry && collEntry.type === 'collection') {
+    loadDocuments(collEntry.id);
+    loadCollections();
+  } else {
+    loadCollections();
+    clearDocuments();
+  }
+}));
 els.btnSaveDoc.addEventListener('click', saveDocument);
 els.btnCancelEdit.addEventListener('click', cancelEdit);
 els.btnCloseEditor.addEventListener('click', () => {
@@ -640,87 +144,7 @@ els.btnCloseEditor.addEventListener('click', () => {
   }
 });
 
-// ── Database selector ──────────────────────────────────────────────────────
-
-function hideSelect(selectEl, labelEl) {
-  selectEl.classList.add('hidden');
-  labelEl.classList.remove('hidden');
-}
-
-function buildProjectOptions() {
-  const projects = [...new Set(state.knownDatabases.map(d => d.project))];
-  els.metaProjectSelect.innerHTML = projects.map(p =>
-    `<option value="${esc(p)}"${p === state.project ? ' selected' : ''}>${esc(p)}</option>`
-  ).join('');
-}
-
-function buildDatabaseOptions() {
-  const databases = state.knownDatabases
-    .filter(d => d.project === state.project)
-    .map(d => d.database);
-  els.metaDatabaseSelect.innerHTML = databases.map(db =>
-    `<option value="${esc(db)}"${db === state.database ? ' selected' : ''}>${esc(db)}</option>`
-  ).join('');
-}
-
-function showProjectSelect() {
-  if (state.knownDatabases.length <= 1) return;
-  buildProjectOptions();
-  els.metaProject.classList.add('hidden');
-  els.metaProjectSelect.classList.remove('hidden');
-  els.metaProjectSelect.focus();
-}
-
-function showDatabaseSelect() {
-  const dbsForProject = state.knownDatabases.filter(d => d.project === state.project);
-  if (dbsForProject.length <= 1) return;
-  buildDatabaseOptions();
-  els.metaDatabase.classList.add('hidden');
-  els.metaDatabaseSelect.classList.remove('hidden');
-  els.metaDatabaseSelect.focus();
-}
-
-function commitProjectSelect() {
-  const newProject = els.metaProjectSelect.value;
-  hideSelect(els.metaProjectSelect, els.metaProject);
-  if (newProject !== state.project) {
-    state.project = newProject;
-    // Switch to first available database for this project
-    const first = state.knownDatabases.find(d => d.project === newProject);
-    if (first) state.database = first.database;
-    els.metaProject.textContent = state.project;
-    els.metaDatabase.textContent = state.database;
-    resetNavigation();
-  }
-}
-
-function commitDatabaseSelect() {
-  const newDatabase = els.metaDatabaseSelect.value;
-  hideSelect(els.metaDatabaseSelect, els.metaDatabase);
-  if (newDatabase !== state.database) {
-    state.database = newDatabase;
-    els.metaDatabase.textContent = state.database;
-    resetNavigation();
-  }
-}
-
-function resetNavigation() {
-  state.navStack = [];
-  state.activeCollection = null;
-  state.activeDocument = null;
-  closeEditor();
-  renderBreadcrumb();
-  loadCollections();
-  clearDocuments();
-}
-
-els.metaProject.addEventListener('click', showProjectSelect);
-els.metaProjectSelect.addEventListener('change', commitProjectSelect);
-els.metaProjectSelect.addEventListener('blur', () => hideSelect(els.metaProjectSelect, els.metaProject));
-
-els.metaDatabase.addEventListener('click', showDatabaseSelect);
-els.metaDatabaseSelect.addEventListener('change', commitDatabaseSelect);
-els.metaDatabaseSelect.addEventListener('blur', () => hideSelect(els.metaDatabaseSelect, els.metaDatabase));
+initSelector();
 
 // ── Init ───────────────────────────────────────────────────────────────────
 
@@ -732,17 +156,10 @@ async function init() {
     state.knownDatabases = config.knownDatabases || [];
     els.metaProject.textContent = config.project;
     els.metaDatabase.textContent = config.database;
-
-    // Show cursor only when there's more than one option to choose from
-    const multipleProjects = new Set(state.knownDatabases.map(d => d.project)).size > 1;
-    const multipleDatabases = state.knownDatabases.filter(d => d.project === state.project).length > 1;
-    if (!multipleProjects) els.metaProject.classList.remove('meta-selectable');
-    if (!multipleDatabases) els.metaDatabase.classList.remove('meta-selectable');
+    updateSelectorState();
   } catch {
     els.metaProject.textContent = 'local';
     els.metaDatabase.textContent = '(default)';
-    els.metaProject.classList.remove('meta-selectable');
-    els.metaDatabase.classList.remove('meta-selectable');
   }
 
   renderBreadcrumb();

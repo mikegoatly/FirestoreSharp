@@ -13,6 +13,8 @@ export async function apiFetch(url, options = {}) {
   return res.json();
 }
 
+// Escapes a value for safe interpolation into HTML content or double-quoted attributes.
+// Not safe for single-quoted attributes, unquoted attributes, or JS/URL contexts.
 export function esc(s) {
   return String(s)
     .replace(/&/g, '&amp;')

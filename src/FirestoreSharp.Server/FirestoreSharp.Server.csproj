@@ -28,6 +28,10 @@
     <EmbeddedResource Include="UI\wwwroot\app.js" />
     <EmbeddedResource Include="UI\wwwroot\api.js" />
     <EmbeddedResource Include="UI\wwwroot\state.js" />
+    <EmbeddedResource Include="UI\wwwroot\render.js" />
+    <EmbeddedResource Include="UI\wwwroot\editor.js" />
+    <EmbeddedResource Include="UI\wwwroot\collections.js" />
+    <EmbeddedResource Include="UI\wwwroot\selector.js" />
     <EmbeddedResource Include="UI\wwwroot\style.css" />
   </ItemGroup>
 
