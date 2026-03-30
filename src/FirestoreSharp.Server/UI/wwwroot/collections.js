@@ -4,6 +4,18 @@ import { state, docsBase, currentParent, NAV, navCollection, navDocument } from 
 import { API, apiFetch, esc } from '/ui/api.js';
 import { renderValue } from '/ui/render.js';
 
+// ── Active-element tracking ────────────────────────────────────────────────
+
+let _activeCollectionEl = null;
+let _activeDocumentEl = null;
+
+export function clearActiveDocument() {
+  _activeDocumentEl?.classList.remove('active');
+  _activeDocumentEl = null;
+}
+
+// ── Injected callbacks ─────────────────────────────────────────────────────
+
 // Injected by app.js to avoid circular dependencies
 let _closeEditor;
 let _renderBreadcrumb;
@@ -50,12 +62,12 @@ export function renderCollections(data) {
 }
 
 function renderCollectionItems(data, container, append) {
-  if (!append) container.innerHTML = '';
+  if (!append) { container.innerHTML = ''; _activeCollectionEl = null; }
 
   data.collectionIds.forEach(id => {
     const el = document.createElement('div');
     el.className = 'collection-item';
-    if (id === state.activeCollection) el.classList.add('active');
+    if (id === state.activeCollection) { el.classList.add('active'); _activeCollectionEl = el; }
     el.innerHTML = `<span class="coll-icon">◉</span><span class="coll-name">${esc(id)}</span>`;
     container.appendChild(el);
   });
@@ -77,10 +89,6 @@ function renderCollectionItems(data, container, append) {
 export function selectCollection(collectionId) {
   state.activeCollection = collectionId;
   state.activeDocument = null;
-
-  els.collectionsList.querySelectorAll('.collection-item').forEach(el => {
-    el.classList.toggle('active', el.querySelector('.coll-name')?.textContent === collectionId);
-  });
 
   const panelParent = state.collectionsPanelParent ?? docsBase();
   const last = state.navStack[state.navStack.length - 1];
@@ -151,13 +159,13 @@ function renderDocuments(data, collectionId) {
 }
 
 function renderDocumentItems(data, collectionId, container, append) {
-  if (!append) container.innerHTML = '';
+  if (!append) { container.innerHTML = ''; _activeDocumentEl = null; }
 
   data.documents.forEach(doc => {
     const el = document.createElement('div');
     el.className = 'document-item';
     el.dataset.collectionId = collectionId;
-    if (doc.resourceName === state.activeDocument) el.classList.add('active');
+    if (doc.resourceName === state.activeDocument) { el.classList.add('active'); _activeDocumentEl = el; }
 
     const fieldKeys = Object.keys(doc.fields || {});
     const previewFields = fieldKeys.slice(0, 3).map(k =>
@@ -201,10 +209,6 @@ export function setEditorCallbacks(showEditorView, showEditorError) {
 
 export async function openDocument(resourceName, collectionId) {
   state.activeDocument = resourceName;
-
-  els.documentsList.querySelectorAll('.document-item').forEach(el => {
-    el.classList.toggle('active', el.querySelector('.doc-id')?.title === resourceName);
-  });
 
   try {
     const data = await apiFetch(`${API}/document?resourceName=${encodeURIComponent(resourceName)}`);
@@ -294,7 +298,12 @@ const els = {
 
 els.collectionsList.addEventListener('click', e => {
   const item = e.target.closest('.collection-item');
-  if (item) selectCollection(item.querySelector('.coll-name').textContent);
+  if (item) {
+    _activeCollectionEl?.classList.remove('active');
+    _activeCollectionEl = item;
+    item.classList.add('active');
+    selectCollection(item.querySelector('.coll-name').textContent);
+  }
 
   const btn = e.target.closest('.btn-load-more');
   if (btn && btn.closest('#collections-list')) loadCollections(state.collPageToken);
@@ -302,7 +311,12 @@ els.collectionsList.addEventListener('click', e => {
 
 els.documentsList.addEventListener('click', e => {
   const item = e.target.closest('.document-item');
-  if (item) openDocument(item.querySelector('.doc-id').title, item.dataset.collectionId);
+  if (item) {
+    _activeDocumentEl?.classList.remove('active');
+    _activeDocumentEl = item;
+    item.classList.add('active');
+    openDocument(item.querySelector('.doc-id').title, item.dataset.collectionId);
+  }
 
   const btn = e.target.closest('.btn-load-more');
   if (btn && btn.closest('#documents-list')) loadDocuments(state.activeCollection, state.docPageToken);

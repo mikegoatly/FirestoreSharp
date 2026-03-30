@@ -8,6 +8,9 @@ import { renderValue } from '/ui/render.js';
 let _loadDocuments;
 export function setLoadDocuments(fn) { _loadDocuments = fn; }
 
+let _clearActiveDocument;
+export function setClearActiveDocument(fn) { _clearActiveDocument = fn; }
+
 export function showEditorView(doc) {
   state.editorMode = 'view';
   els.editorPanel.classList.remove('hidden');
@@ -65,7 +68,7 @@ export function showCreateMode(collectionId) {
   state.editorMode = 'create';
   state.activeDocument = null;
 
-  els.documentsList.querySelectorAll('.document-item').forEach(el => el.classList.remove('active'));
+  _clearActiveDocument?.();
 
   els.editorPanel.classList.remove('hidden');
   els.editorTitle.textContent = 'New document';
@@ -91,7 +94,7 @@ export function closeEditor() {
   els.editorPanel.classList.add('hidden');
   state.editorMode = null;
   state.activeDocument = null;
-  els.documentsList.querySelectorAll('.document-item').forEach(el => el.classList.remove('active'));
+  _clearActiveDocument?.();
 }
 
 export async function saveDocument() {

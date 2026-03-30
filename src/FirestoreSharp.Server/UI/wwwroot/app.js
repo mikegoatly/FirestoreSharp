@@ -7,12 +7,12 @@ import {
   loadCollections, renderCollections, selectCollection,
   loadDocuments, clearDocuments, openDocument,
   showNewCollectionModal, hideNewCollectionModal, confirmNewCollection,
-  setCallbacks, setEditorCallbacks,
+  setCallbacks, setEditorCallbacks, clearActiveDocument,
 } from '/ui/collections.js';
 import {
   showEditorView, enterEditMode, showCreateMode, closeEditor,
   saveDocument, deleteDocument, cancelEdit,
-  setLoadDocuments,
+  setLoadDocuments, setClearActiveDocument,
 } from '/ui/editor.js';
 import { initSelector, updateSelectorState, setResetNavigation } from '/ui/selector.js';
 
@@ -96,6 +96,7 @@ function resetNavigation() {
 setCallbacks(closeEditor, renderBreadcrumb, showCreateMode);
 setEditorCallbacks(showEditorView, showEditorError);
 setLoadDocuments(loadDocuments);
+setClearActiveDocument(clearActiveDocument);
 setResetNavigation(resetNavigation);
 
 function showEditorError(msg) {
