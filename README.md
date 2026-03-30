@@ -9,6 +9,14 @@ The motivation behind this project is to avoid the memory challenges faced when 
 option to use a file-based storage approach, FirestoreSharp allows for larger datasets to be handled without running into
 memory limitations.
 
+## Development setup
+
+After cloning the repo, restore the local .NET tools (used for git hooks):
+
+```bash
+dotnet tool restore
+```
+
 ## Quick start
 
 ```bash
