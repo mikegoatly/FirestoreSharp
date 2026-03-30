@@ -1,7 +1,9 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
-RUN apt-get update && apt-get install -y git clang zlib1g-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y git clang zlib1g-dev curl && rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
+    apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
 
 COPY .git/ /src/.git/
 COPY Directory.Packages.props .

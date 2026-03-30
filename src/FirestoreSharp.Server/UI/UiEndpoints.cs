@@ -1,8 +1,8 @@
-using System.Reflection;
 using System.Security.Cryptography;
 using FirestoreSharp.Core;
 using Google.Cloud.Firestore.V1;
 using Grpc.Core;
+using Microsoft.Extensions.FileProviders;
 
 namespace FirestoreSharp.Server.UI;
 
@@ -16,8 +16,17 @@ internal static class UiEndpoints
 
     public static WebApplication MapFirestoreUi(this WebApplication app)
     {
-        app.MapGet("/ui", () => Results.Redirect("/ui/index.html"));
-        app.MapGet("/ui/{*path}", ServeStaticFile);
+        var wwwroot = Path.Combine(AppContext.BaseDirectory, "UI", "wwwroot");
+        var fileProvider = new PhysicalFileProvider(wwwroot);
+        var staticFileOptions = new StaticFileOptions
+        {
+            FileProvider = fileProvider,
+            RequestPath = "/ui",
+        };
+
+        app.UseStaticFiles(staticFileOptions);
+        app.MapGet("/ui", () => Results.Redirect("/ui/"));
+        app.MapFallbackToFile("/ui/{*path:nonfile}", "index.html", staticFileOptions);
 
         var api = app.MapGroup("/api/ui");
         api.MapGet("/config", GetConfig);
@@ -29,24 +38,6 @@ internal static class UiEndpoints
         api.MapDelete("/document", DeleteDocument);
 
         return app;
-    }
-
-    private static IResult ServeStaticFile(string? path)
-    {
-        var resourcePath = (path ?? "index.html").Replace('/', '.');
-        var resourceName = $"FirestoreSharp.Server.UI.wwwroot.{resourcePath}";
-        var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream(resourceName);
-        if (stream is null)
-            return Results.NotFound();
-
-        var contentType = resourcePath switch
-        {
-            var p when p.EndsWith(".js", StringComparison.OrdinalIgnoreCase) => "application/javascript",
-            var p when p.EndsWith(".css", StringComparison.OrdinalIgnoreCase) => "text/css",
-            _ => "text/html; charset=utf-8"
-        };
-
-        return Results.Stream(stream, contentType);
     }
 
     private static async Task<IResult> GetConfig(IDocumentStore documentStore, CancellationToken cancellationToken)

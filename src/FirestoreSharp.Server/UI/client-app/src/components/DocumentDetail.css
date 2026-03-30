@@ -1,0 +1,65 @@
+.doc-detail {
+  padding: 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.doc-meta {
+  padding: 8px 12px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.editor-actions-bar {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 6px;
+}
+
+.editor-field {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+  gap: 2px;
+}
+.editor-field-key {
+  font-size: 11px;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.editor-field-value { font-family: monospace; font-size: 13px; word-break: break-all; }
+
+.editor-subcollections {
+  margin-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.editor-subcollections-header {
+  font-weight: 600;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-dim);
+  padding: 8px 12px 4px;
+}
+.editor-subcollections-body { padding-bottom: 8px; }
+
+.subcoll-item {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  cursor: pointer;
+  gap: 8px;
+  transition: background 0.1s;
+}
+.subcoll-item:hover { background: var(--bg3); color: var(--accent); }
+.subcoll-item .coll-icon { color: var(--text-dim); font-size: 14px; flex-shrink: 0; }
+.subcoll-item .coll-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subcoll-arrow { color: var(--text-muted); font-size: 14px; flex-shrink: 0; }

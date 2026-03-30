@@ -1,0 +1,23 @@
+.breadcrumb {
+  height: var(--breadcrumb-h);
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 4px;
+  flex-shrink: 0;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.breadcrumb-item {
+  color: var(--text-dim);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.breadcrumb-item:hover { color: var(--text); background: var(--bg3); }
+.breadcrumb-item.active { color: var(--text); pointer-events: none; }
+.breadcrumb-sep { color: var(--text-muted); font-size: 11px; }

@@ -23,16 +23,46 @@
     <ProjectReference Include="..\FirestoreSharp.Core\FirestoreSharp.Core.csproj" />
   </ItemGroup>
 
+
+  <Target Name="NpmInstall" BeforeTargets="BuildClientApp"
+          Condition="'$(SkipClientBuild)' != 'true'"
+          Inputs="$(MSBuildThisFileDirectory)UI\client-app\package-lock.json"
+          Outputs="$(MSBuildThisFileDirectory)UI\client-app\node_modules\.package-lock.json">
+    <Exec Command="npm ci" WorkingDirectory="$(MSBuildThisFileDirectory)UI\client-app" />
+  </Target>
+
+  <Target Name="BuildClientApp" BeforeTargets="BeforeBuild"
+          Condition="'$(SkipClientBuild)' != 'true'"
+          Inputs="@(ClientAppSources)"
+          Outputs="$(MSBuildThisFileDirectory)UI\wwwroot\index.html">
+    <Exec Command="npm run build" WorkingDirectory="$(MSBuildThisFileDirectory)UI\client-app" />
+  </Target>
+
+  <Target Name="CopyClientAppOutput" AfterTargets="BuildClientApp;BeforeBuild"
+          Condition="'$(SkipClientBuild)' != 'true'">
+    <ItemGroup>
+      <_WwwrootFiles Include="$(MSBuildThisFileDirectory)UI\wwwroot\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WwwrootFiles)"
+          DestinationFiles="@(_WwwrootFiles->'$(OutDir)UI\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="PublishClientAppOutput" AfterTargets="Publish"
+          Condition="'$(SkipClientBuild)' != 'true'">
+    <ItemGroup>
+      <_WwwrootFilesForPublish Include="$(MSBuildThisFileDirectory)UI\wwwroot\**\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_WwwrootFilesForPublish)"
+          DestinationFiles="@(_WwwrootFilesForPublish->'$(PublishDir)UI\wwwroot\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <ItemGroup>
-    <EmbeddedResource Include="UI\wwwroot\index.html" />
-    <EmbeddedResource Include="UI\wwwroot\app.js" />
-    <EmbeddedResource Include="UI\wwwroot\api.js" />
-    <EmbeddedResource Include="UI\wwwroot\state.js" />
-    <EmbeddedResource Include="UI\wwwroot\render.js" />
-    <EmbeddedResource Include="UI\wwwroot\editor.js" />
-    <EmbeddedResource Include="UI\wwwroot\collections.js" />
-    <EmbeddedResource Include="UI\wwwroot\selector.js" />
-    <EmbeddedResource Include="UI\wwwroot\style.css" />
+    <ClientAppSources Include="$(MSBuildThisFileDirectory)UI\client-app\src\**\*" />
+    <ClientAppSources Include="$(MSBuildThisFileDirectory)UI\client-app\index.html" />
+    <ClientAppSources Include="$(MSBuildThisFileDirectory)UI\client-app\vite.config.ts" />
+    <ClientAppSources Include="$(MSBuildThisFileDirectory)UI\client-app\package-lock.json" />
   </ItemGroup>
 
 </Project>
