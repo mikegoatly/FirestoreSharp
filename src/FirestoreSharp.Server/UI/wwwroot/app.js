@@ -1,26 +1,8 @@
 // FirestoreSharp Emulator UI
 // Vanilla JS, no dependencies.
 
-const API = '/api/ui';
-
-// ── State ──────────────────────────────────────────────────────────────────
-
-const state = {
-  project: 'local',
-  database: '(default)',
-  knownDatabases: [],  // array of { project, database }
-
-  // Navigation stack: array of { type: 'collection'|'document', id, resourceName }
-  navStack: [],
-
-  activeCollection: null,   // collection ID currently shown in middle panel
-  activeDocument: null,     // full resourceName of document shown in editor
-  editorMode: null,         // 'view' | 'edit' | 'create'
-
-  // Pagination
-  docPageToken: null,
-  collPageToken: null,
-};
+import { state, docsBase, currentParent } from '/ui/state.js';
+import { API, apiFetch, esc } from '/ui/api.js';
 
 // ── DOM refs ───────────────────────────────────────────────────────────────
 
@@ -59,38 +41,6 @@ const els = {
   btnCancelCollection: $('btn-cancel-collection'),
   btnConfirmCollection: $('btn-confirm-collection'),
 };
-
-// ── Helpers ────────────────────────────────────────────────────────────────
-
-function docsBase() {
-  return `projects/${state.project}/databases/${state.database}/documents`;
-}
-
-function currentParent() {
-  // Build the parent resource name from the nav stack
-  const base = docsBase();
-  if (state.navStack.length === 0) return base;
-  return state.navStack[state.navStack.length - 1].resourceName;
-}
-
-async function apiFetch(url, options = {}) {
-  const res = await fetch(url, options);
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try { const j = await res.json(); msg = j.detail || j.title || msg; } catch {}
-    throw new Error(msg);
-  }
-  if (res.status === 204) return null;
-  return res.json();
-}
-
-function esc(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
 
 // ── Value rendering ────────────────────────────────────────────────────────
 
@@ -692,6 +642,11 @@ els.btnCloseEditor.addEventListener('click', () => {
 
 // ── Database selector ──────────────────────────────────────────────────────
 
+function hideSelect(selectEl, labelEl) {
+  selectEl.classList.add('hidden');
+  labelEl.classList.remove('hidden');
+}
+
 function buildProjectOptions() {
   const projects = [...new Set(state.knownDatabases.map(d => d.project))];
   els.metaProjectSelect.innerHTML = projects.map(p =>
@@ -727,8 +682,7 @@ function showDatabaseSelect() {
 
 function commitProjectSelect() {
   const newProject = els.metaProjectSelect.value;
-  els.metaProjectSelect.classList.add('hidden');
-  els.metaProject.classList.remove('hidden');
+  hideSelect(els.metaProjectSelect, els.metaProject);
   if (newProject !== state.project) {
     state.project = newProject;
     // Switch to first available database for this project
@@ -742,8 +696,7 @@ function commitProjectSelect() {
 
 function commitDatabaseSelect() {
   const newDatabase = els.metaDatabaseSelect.value;
-  els.metaDatabaseSelect.classList.add('hidden');
-  els.metaDatabase.classList.remove('hidden');
+  hideSelect(els.metaDatabaseSelect, els.metaDatabase);
   if (newDatabase !== state.database) {
     state.database = newDatabase;
     els.metaDatabase.textContent = state.database;
@@ -763,17 +716,11 @@ function resetNavigation() {
 
 els.metaProject.addEventListener('click', showProjectSelect);
 els.metaProjectSelect.addEventListener('change', commitProjectSelect);
-els.metaProjectSelect.addEventListener('blur', () => {
-  els.metaProjectSelect.classList.add('hidden');
-  els.metaProject.classList.remove('hidden');
-});
+els.metaProjectSelect.addEventListener('blur', () => hideSelect(els.metaProjectSelect, els.metaProject));
 
 els.metaDatabase.addEventListener('click', showDatabaseSelect);
 els.metaDatabaseSelect.addEventListener('change', commitDatabaseSelect);
-els.metaDatabaseSelect.addEventListener('blur', () => {
-  els.metaDatabaseSelect.classList.add('hidden');
-  els.metaDatabase.classList.remove('hidden');
-});
+els.metaDatabaseSelect.addEventListener('blur', () => hideSelect(els.metaDatabaseSelect, els.metaDatabase));
 
 // ── Init ───────────────────────────────────────────────────────────────────
 

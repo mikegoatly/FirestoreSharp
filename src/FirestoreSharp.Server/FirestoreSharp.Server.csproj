@@ -26,6 +26,8 @@
   <ItemGroup>
     <EmbeddedResource Include="UI\wwwroot\index.html" />
     <EmbeddedResource Include="UI\wwwroot\app.js" />
+    <EmbeddedResource Include="UI\wwwroot\api.js" />
+    <EmbeddedResource Include="UI\wwwroot\state.js" />
     <EmbeddedResource Include="UI\wwwroot\style.css" />
   </ItemGroup>
 
