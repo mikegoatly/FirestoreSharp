@@ -72,4 +72,21 @@ internal sealed class InMemoryDocumentStore : IDocumentStore
 
         return Task.CompletedTask;
     }
+
+    public Task<IReadOnlyList<(string Project, string Database)>> GetKnownDatabasesAsync(CancellationToken cancellationToken = default)
+    {
+        var results = _documents.Keys
+            .Select(key =>
+            {
+                // Format: projects/{project}/databases/{database}/documents/...
+                var parts = key.Split('/');
+                return parts.Length >= 4 ? (parts[1], parts[3]) : default;
+            })
+            .Where(pair => pair != default)
+            .Distinct()
+            .OrderBy(pair => pair.Item1).ThenBy(pair => pair.Item2)
+            .ToList();
+
+        return Task.FromResult<IReadOnlyList<(string Project, string Database)>>(results);
+    }
 }

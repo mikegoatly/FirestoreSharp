@@ -174,6 +174,9 @@ internal sealed class OverlayStore(IDocumentStore baseStore) : IDocumentStore
         Tombstone(path.ResourceName);
     }
 
+    public Task<IReadOnlyList<(string Project, string Database)>> GetKnownDatabasesAsync(CancellationToken cancellationToken = default) =>
+        baseStore.GetKnownDatabasesAsync(cancellationToken);
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
     private OverlayEntry? GetOverlayEntry(string resourceName) =>

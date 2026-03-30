@@ -323,6 +323,23 @@ public sealed class OverlayStoreTests
         Assert.Single(results);
         Assert.Equal("written", results[0].Fields["v"].StringValue);
     }
+
+    // ── GetKnownDatabasesAsync ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task GetKnownDatabasesAsync_DelegatesToBaseStore()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (baseStore, overlay) = MakeStores();
+        var path = MakePath("doc1");
+        await baseStore.CreateAsync(path, MakeDocument("doc1", "v"), ct);
+
+        var result = await overlay.GetKnownDatabasesAsync(ct);
+
+        Assert.Single(result);
+        Assert.Equal("test", result[0].Project);
+        Assert.Equal("(default)", result[0].Database);
+    }
 }
 
 file static class AsyncEnumerableExtensions

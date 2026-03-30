@@ -8,6 +8,7 @@ namespace FirestoreSharp.Server.UI;
 [JsonSerializable(typeof(CreateDocumentRequest))]
 [JsonSerializable(typeof(UpdateDocumentRequest))]
 [JsonSerializable(typeof(ConfigResponse))]
+[JsonSerializable(typeof(DatabaseInfo))]
 [JsonSerializable(typeof(UiValue))]
 [JsonSerializable(typeof(UiGeoPoint))]
 [JsonSerializable(typeof(IReadOnlyDictionary<string, UiValue>))]

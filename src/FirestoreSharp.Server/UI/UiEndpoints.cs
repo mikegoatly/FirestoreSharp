@@ -49,8 +49,18 @@ internal static class UiEndpoints
         return Results.Stream(stream, contentType);
     }
 
-    private static IResult GetConfig() =>
-        Results.Ok(new ConfigResponse(DefaultProject, DefaultDatabase));
+    private static async Task<IResult> GetConfig(IDocumentStore documentStore, CancellationToken cancellationToken)
+    {
+        var known = await documentStore.GetKnownDatabasesAsync(cancellationToken).ConfigureAwait(false);
+        var knownDbs = known.Select(db => new DatabaseInfo(db.Project, db.Database)).ToList();
+
+        // If there are known databases, use the first as the active one; otherwise fall back to defaults.
+        var (project, database) = knownDbs.Count > 0
+            ? (knownDbs[0].Project, knownDbs[0].Database)
+            : (DefaultProject, DefaultDatabase);
+
+        return Results.Ok(new ConfigResponse(project, database, knownDbs));
+    }
 
     private static async Task<IResult> ListCollections(
         string parent,

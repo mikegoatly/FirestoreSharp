@@ -89,6 +89,32 @@ internal sealed class FileSystemDocumentStore(IOptions<FileSystemStorageOptions>
         return Task.CompletedTask;
     }
 
+    public Task<IReadOnlyList<(string Project, string Database)>> GetKnownDatabasesAsync(CancellationToken cancellationToken = default)
+    {
+        var results = new List<(string Project, string Database)>();
+
+        if (!Directory.Exists(_basePath))
+            return Task.FromResult<IReadOnlyList<(string Project, string Database)>>(results);
+
+        foreach (var projectDir in Directory.EnumerateDirectories(_basePath))
+        {
+            var project = Path.GetFileName(projectDir);
+            foreach (var databaseDir in Directory.EnumerateDirectories(projectDir))
+            {
+                var database = Path.GetFileName(databaseDir);
+                results.Add((project, database));
+            }
+        }
+
+        results.Sort((a, b) =>
+        {
+            var cmp = StringComparer.Ordinal.Compare(a.Project, b.Project);
+            return cmp != 0 ? cmp : StringComparer.Ordinal.Compare(a.Database, b.Database);
+        });
+
+        return Task.FromResult<IReadOnlyList<(string Project, string Database)>>(results);
+    }
+
     private void DeleteEmptyParentDirectories(string directory)
     {
         string? currentPath = directory;

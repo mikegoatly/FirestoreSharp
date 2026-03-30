@@ -35,4 +35,6 @@ internal sealed record UpdateDocumentRequest(
     IReadOnlyDictionary<string, UiValue>? Fields,
     IReadOnlyList<string>? UpdateMask);
 
-internal sealed record ConfigResponse(string Project, string Database);
+internal sealed record DatabaseInfo(string Project, string Database);
+
+internal sealed record ConfigResponse(string Project, string Database, IReadOnlyList<DatabaseInfo> KnownDatabases);

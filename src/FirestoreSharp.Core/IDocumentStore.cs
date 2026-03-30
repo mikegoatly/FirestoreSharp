@@ -15,4 +15,7 @@ public interface IDocumentStore
     Task<Document> UpdateAsync(DocumentPath path, Document document, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(DocumentPath path, CancellationToken cancellationToken = default);
+
+    /// <summary>Returns all distinct (project, database) pairs that have stored documents.</summary>
+    Task<IReadOnlyList<(string Project, string Database)>> GetKnownDatabasesAsync(CancellationToken cancellationToken = default);
 }
