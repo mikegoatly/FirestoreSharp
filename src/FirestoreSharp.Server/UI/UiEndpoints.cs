@@ -17,16 +17,20 @@ internal static class UiEndpoints
     public static WebApplication MapFirestoreUi(this WebApplication app)
     {
         var wwwroot = Path.Combine(AppContext.BaseDirectory, "UI", "wwwroot");
-        var fileProvider = new PhysicalFileProvider(wwwroot);
-        var staticFileOptions = new StaticFileOptions
-        {
-            FileProvider = fileProvider,
-            RequestPath = "/ui",
-        };
 
-        app.UseStaticFiles(staticFileOptions);
-        app.MapGet("/ui", () => Results.Redirect("/ui/"));
-        app.MapFallbackToFile("/ui/{*path:nonfile}", "index.html", staticFileOptions);
+        if (Directory.Exists(wwwroot))
+        {
+            var fileProvider = new PhysicalFileProvider(wwwroot);
+            var staticFileOptions = new StaticFileOptions
+            {
+                FileProvider = fileProvider,
+                RequestPath = "/ui",
+            };
+
+            app.UseStaticFiles(staticFileOptions);
+            app.MapGet("/ui", () => Results.Redirect("/ui/"));
+            app.MapFallbackToFile("/ui/{*path:nonfile}", "index.html", staticFileOptions);
+        }
 
         var api = app.MapGroup("/api/ui");
         api.MapGet("/config", GetConfig);
