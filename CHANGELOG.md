@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.0](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.2.0...firestoresharp-v0.3.0) (2026-03-31)
+
+
+### Features
+
+* Add sub items to the demo UI ([c690ad2](https://github.com/mikegoatly/FirestoreSharp/commit/c690ad2193b9fa9ba88be53fb0c4640ecf5430c6))
+* Rebuild UI as a mini-React app ([e09c921](https://github.com/mikegoatly/FirestoreSharp/commit/e09c921ff00d0d7d1a5b445a6e60421c7bc31f3b))
+* track parent resource name for collections panel ([bd4a0df](https://github.com/mikegoatly/FirestoreSharp/commit/bd4a0dfb9e61d63bbe76fbac3a4b5076370d7192))
+
+
+### Bug Fixes
+
+* failing tests ([2eb292a](https://github.com/mikegoatly/FirestoreSharp/commit/2eb292ad726ff6df1496b24e979630ef8d404bdf))
+
 ## [0.2.0](https://github.com/mikegoatly/FirestoreSharp/compare/firestoresharp-v0.1.2...firestoresharp-v0.2.0) (2026-03-30)
 
 
